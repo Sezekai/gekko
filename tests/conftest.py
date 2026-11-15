@@ -38,3 +38,22 @@ def qapp():
     from gekko.ui import theme
     theme.apply(app)
     return app
+
+
+_status = {"code": 0}
+
+
+def pytest_sessionfinish(session, exitstatus):
+    _status["code"] = int(exitstatus)
+
+
+def pytest_unconfigure(config):
+    """Leave without Python tearing down Qt objects one by one (that can crash on Windows after every test has
+    passed, and turn a green run red)."""
+    import sys
+    for s in (sys.stdout, sys.stderr):
+        try:
+            s.flush()
+        except Exception:
+            pass
+    os._exit(_status["code"])
