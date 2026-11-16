@@ -206,3 +206,49 @@ def test_pages_built_again_leave_nothing_behind(win, qapp, monkeypatch):
     win.pb.toggle()
     settle(qapp, 0.3)
     assert not errors, errors
+
+
+def test_history_records_every_play_in_order(win, qapp):
+    """A, A again, B, then A: four entries, in order, the second A marked as a repeat in a row."""
+    from gekko.core.db import get_db
+    from gekko.ui import filters
+    from gekko.ui.history import group_of, mark_repeats
+    pb = win.pb
+    rows = win.lib.album_songs(win.lib.albums()[0]["key"])
+    a, b = rows[0]["id"], rows[1]["id"]
+    pb.play_ids([a, a, b, a], context="Test")
+    settle(qapp, 3.0)                         # 20x speed: every song is over
+    hist = get_db().listens()
+    assert [r["song_id"] for r in reversed(hist)][:4] == [a, a, b, a]
+    assert all(r["counted"] for r in hist[:4]) and hist[0]["context"] == "Test"
+    reps = mark_repeats(hist)
+    chron = list(reversed(hist))
+    assert [reps[r["id"]] for r in chron[:4]] == [1, 2, 1, 1]
+    # filters: listened to / not listened to today
+    f = filters.prepare(filters.new(listen=True, listen_preset="today"))
+    heard = [r["id"] for r in win.lib.rows if filters.match(f, r)]
+    assert set(heard) == {a, b}
+    f = filters.prepare(filters.new(listen=False, listen_preset="today"))
+    assert a not in [r["id"] for r in win.lib.rows if filters.match(f, r)]
+    assert group_of(hist[0]["at"], "day")[1].startswith("Today")
+    # the History screen, list and grid, every grouping
+    win.go("history")
+    hp = win.history_page
+    for g in ("day", "week", "month", "year"):
+        hp.group.set_value(g)
+        hp.group.changed.emit(g)
+        settle(qapp, 0.1)
+        assert hp.tree.topLevelItemCount() == 1 and hp.tree.topLevelItem(0).childCount() == len(hist)
+    hp.view.set_value("grid")
+    hp._view("grid")
+    settle(qapp, 0.2)
+    assert hp.grid.grids and hp.grid.grids[0].model_.rowCount() == 2
+    # between two dates that don't include today: nothing
+    hp.range.set_dates("2020-01-01", "2020-01-31")
+    hp.refresh()
+    assert not hp.entries
+    # one song's own history
+    from gekko.ui.history import SongHistory
+    sh = SongHistory()
+    sh.set_song(a)
+    assert sh.tree.topLevelItemCount() == 3

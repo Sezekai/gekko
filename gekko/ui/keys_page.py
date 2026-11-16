@@ -44,6 +44,7 @@ KEYS = [
         (["V"], "Favourite / unfavourite"),
         (["[", "]"], "Rating down / up half a star"),
         (["E"], "Edit info"),
+        (["I"], "Listening history: every time the song played"),
         (["Delete"], "Remove from the library (asks first; the file stays)"),
         (["Shift+Delete"], "Send to the Recycle Bin (asks first)"),
         (["Home", "End"], "First / last in the list"),

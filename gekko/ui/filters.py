@@ -18,6 +18,7 @@ EMPTY: dict[str, Any] = {
     "text": "", "fav": None, "rating_min": None, "rating_max": None, "unrated": None, "played": None,
     "lyrics": None, "info": None, "genres": [], "genres_not": False, "len_min": None, "len_max": None,
     "year_min": None, "year_max": None, "added_days": None, "added_old": False, "plays_min": None,
+    "plays_max": None, "listen": None, "listen_from": None, "listen_to": None, "listen_preset": None,
     "artist": "", "album": "", "missing": None, "tidy": None,
 }
 
@@ -40,6 +41,27 @@ def clean(f: dict | None) -> dict:
 def _mmss(s: float) -> str:
     s = int(s)
     return f"{s // 60}:{s % 60:02d}"
+
+
+def listen_dates(f: dict) -> tuple[str | None, str | None]:
+    """The days a history filter covers. Quick choices ("last 30 days") move with today; saved smart playlists
+    keep meaning the same thing."""
+    p = f.get("listen_preset")
+    if p and p not in ("custom",):
+        from .daterange import preset_dates
+        return preset_dates(p)
+    return f.get("listen_from"), f.get("listen_to")
+
+
+def prepare(f: dict) -> dict:
+    """A copy of the filter ready for match(): looks up which songs were listened to in its dates, once."""
+    out = dict(f)
+    if f.get("listen") is not None:
+        from ..core.db import get_db
+        from .daterange import times
+        a, b = times(*listen_dates(f))
+        out["_listened"] = get_db().listened_ids(a, b)
+    return out
 
 
 def is_active(f: dict) -> bool:
@@ -68,6 +90,15 @@ def match(f: dict, r: dict) -> bool:
         return False
     if f.get("plays_min") and (r["plays"] or 0) < f["plays_min"]:
         return False
+    if f.get("plays_max") is not None and (r["plays"] or 0) > f["plays_max"]:
+        return False
+    if f.get("listen") is not None:
+        heard = f.get("_listened")
+        if heard is None:
+            heard = prepare(f)["_listened"]
+            f["_listened"] = heard
+        if (r["id"] in heard) != f["listen"]:
+            return False
     if f.get("lyrics") is not None and bool(r["has_lyrics"]) != f["lyrics"]:
         return False
     if f.get("info") is not None:
@@ -121,8 +152,23 @@ def describe(f: dict) -> list[tuple[str, list[str]]]:
         out.append((f"{f['rating_max'] / 2:g}★ or less", ["rating_max"]))
     if f.get("played") is not None:
         out.append((yn(f["played"], "Played", "Never played"), ["played"]))
-    if f.get("plays_min"):
+    if f.get("plays_min") and f.get("plays_max") is not None:
+        out.append((f"Played {f['plays_min']}–{f['plays_max']} times", ["plays_min", "plays_max"]))
+    elif f.get("plays_min"):
         out.append((f"Played {f['plays_min']}+ times", ["plays_min"]))
+    elif f.get("plays_max") is not None:
+        out.append((f"Played at most {f['plays_max']} times", ["plays_max"]))
+    if f.get("listen") is not None:
+        from .daterange import describe as ddesc
+        p = f.get("listen_preset")
+        when = {"all": "ever", "today": "today", "yesterday": "yesterday", "week": "this week",
+                "last7": "in the last 7 days", "month": "this month", "last30": "in the last 30 days",
+                "year": "this year"}.get(p or "")
+        if when is None:
+            a, b = f.get("listen_from"), f.get("listen_to")
+            when = ("on " if a and a == b else "") + ddesc(a, b) if (a or b) else "ever"
+        out.append((("Listened to " if f["listen"] else "Not listened to ") + when,
+                    ["listen", "listen_from", "listen_to", "listen_preset"]))
     if f.get("lyrics") is not None:
         out.append((yn(f["lyrics"], "Has lyrics", "No lyrics"), ["lyrics"]))
     if f.get("info") is not None:
@@ -253,12 +299,38 @@ class FilterForm(QWidget):
         al.addWidget(self.added)
         al.addStretch(1)
         add("Added", aw)
+        pw = QWidget()
+        pl = QHBoxLayout(pw)
+        pl.setContentsMargins(0, 0, 0, 0)
+        pl.setSpacing(6)
+        self.plays_min = QSpinBox()
+        self.plays_min.setRange(0, 99999)
+        self.plays_min.setSpecialValueText("–")
+        self.plays_min.setFixedWidth(76)
+        self.plays_max = QSpinBox()
+        self.plays_max.setRange(-1, 99999)
+        self.plays_max.setSpecialValueText("–")
+        self.plays_max.setValue(-1)
+        self.plays_max.setFixedWidth(76)
+        pl.addWidget(label("from", "faint"))
+        pl.addWidget(self.plays_min)
+        pl.addWidget(label("to", "faint"))
+        pl.addWidget(self.plays_max)
+        pl.addWidget(label("times", "faint"))
+        pl.addStretch(1)
+        add("Listens", pw)
+        lw2 = QWidget()
+        ll2 = QHBoxLayout(lw2)
+        ll2.setContentsMargins(0, 0, 0, 0)
+        ll2.setSpacing(6)
+        self.listen = _Tri("Listened to", "Not listened to")
+        ll2.addWidget(self.listen)
+        from .daterange import DateRange
+        self.listen_when = DateRange("last30")
+        ll2.addWidget(self.listen_when)
+        ll2.addStretch(1)
+        add("History", lw2)
         if smart:
-            self.plays_min = QSpinBox()
-            self.plays_min.setRange(0, 9999)
-            self.plays_min.setSpecialValueText("Any")
-            self.plays_min.setFixedWidth(90)
-            add("Played at least", self.plays_min)
             self.artist = QLineEdit()
             self.artist.setPlaceholderText("Artist name contains…")
             add("Artist", self.artist)
@@ -287,11 +359,19 @@ class FilterForm(QWidget):
         for w in (self.len_min, self.len_max, self.year_min, self.year_max):
             w.valueChanged.connect(self._emit)
         self.genre_list.itemChanged.connect(self._emit)
+        self.plays_min.valueChanged.connect(self._emit)
+        self.plays_max.valueChanged.connect(self._emit)
+        self.listen.changed.connect(self._listen_changed)
+        self.listen_when.changed.connect(self._emit)
+        self._listen_changed()
         if smart:
-            self.plays_min.valueChanged.connect(self._emit)
             self.artist.textChanged.connect(self._emit)
             self.album.textChanged.connect(self._emit)
         self.smart = smart
+
+    def _listen_changed(self, *_):
+        self.listen_when.setEnabled(self.listen.get() is not None)
+        self._emit()
 
     @staticmethod
     def _mins() -> QSpinBox:
@@ -333,8 +413,13 @@ class FilterForm(QWidget):
         f["genres"] = [self.genre_list.item(i).text() for i in range(self.genre_list.count())
                        if self.genre_list.item(i).checkState() == Qt.Checked]
         f["genres_not"] = self.genres_not.value == "not"
+        f["plays_min"] = self.plays_min.value() or None
+        f["plays_max"] = self.plays_max.value() if self.plays_max.value() >= 0 else None
+        f["listen"] = self.listen.get()
+        a, b = self.listen_when.dates() if f["listen"] is not None else (None, None)
+        f["listen_preset"] = self.listen_when.key() if f["listen"] is not None else None
+        f["listen_from"], f["listen_to"] = (a, b) if f["listen_preset"] == "custom" else (None, None)
         if self.smart:
-            f["plays_min"] = self.plays_min.value() or None
             f["artist"] = self.artist.text().strip()
             f["album"] = self.album.text().strip()
         return f
@@ -364,8 +449,18 @@ class FilterForm(QWidget):
                 it = self.genre_list.item(i)
                 it.setCheckState(Qt.Checked if it.text().casefold() in want else Qt.Unchecked)
             self.genres_not.set_value("not" if f["genres_not"] else "in")
+            self.plays_min.setValue(int(f["plays_min"] or 0))
+            self.plays_max.setValue(int(f["plays_max"]) if f["plays_max"] is not None else -1)
+            self.listen.put(f["listen"])
+            if f["listen"] is not None:
+                if f["listen_preset"] and f["listen_preset"] != "custom":
+                    self.listen_when.set_preset(f["listen_preset"])
+                elif f["listen_from"] or f["listen_to"]:
+                    self.listen_when.set_dates(f["listen_from"], f["listen_to"])
+                else:
+                    self.listen_when.set_preset("all")
+            self.listen_when.setEnabled(f["listen"] is not None)
             if self.smart:
-                self.plays_min.setValue(int(f["plays_min"] or 0))
                 self.artist.setText(f["artist"] or "")
                 self.album.setText(f["album"] or "")
         finally:

@@ -160,7 +160,8 @@ class SongBrowser(QWidget):
         rows = self.rows_fn()
         f = self.f
         if filters.is_active(f):
-            rows = [r for r in rows if filters.match(f, r)]
+            pf = filters.prepare(f)
+            rows = [r for r in rows if filters.match(pf, r)]
         self.shown = rows
         self.table.context = self.context()
         self.table.set_rows(rows)

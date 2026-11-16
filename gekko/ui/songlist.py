@@ -31,9 +31,11 @@ COLUMNS = {
     "length": ("Length", 58, Qt.AlignRight | Qt.AlignVCenter),
     "rating": ("Rating", 90, Qt.AlignLeft | Qt.AlignVCenter),
     "plays": ("Plays", 50, Qt.AlignRight | Qt.AlignVCenter),
+    "last": ("Last played", 100, Qt.AlignRight | Qt.AlignVCenter),
     "added": ("Added", 92, Qt.AlignRight | Qt.AlignVCenter),
 }
-DEFAULT_COLS = ["cover", "fav", "title", "artist", "album", "genre", "year", "length", "rating", "plays", "added"]
+DEFAULT_COLS = ["cover", "fav", "title", "artist", "album", "genre", "year", "length", "rating", "plays", "last",
+                "added"]
 ALBUM_COLS = ["track", "fav", "title", "artist", "length", "rating", "plays"]
 
 
@@ -50,6 +52,7 @@ def _sort_key(col: str):
         "length": lambda r: r["duration"] or 0,
         "rating": lambda r: r["rating"] or 0,
         "plays": lambda r: r["plays"] or 0,
+        "last": lambda r: r["last_played"] or 0,
         "added": lambda r: r["added_at"] or 0,
     }[col]
 
@@ -125,6 +128,8 @@ class SongModel(QAbstractTableModel):
                 return str(r["plays"]) if r["plays"] else ""
             if c == "added":
                 return _ago(r["added_at"])
+            if c == "last":
+                return _ago(r["last_played"]) if r["last_played"] else "Never"
             if c == "track":
                 return f"{r['track']}" if r["track"] else ""
             return None
@@ -133,7 +138,7 @@ class SongModel(QAbstractTableModel):
         if role == Qt.ForegroundRole:
             if r["missing"]:
                 return QColor(C["faint"])
-            if c in ("artist", "album", "genre", "year", "length", "plays", "added", "track"):
+            if c in ("artist", "album", "genre", "year", "length", "plays", "added", "track", "last"):
                 return QColor(C["sec"])
             return None
         if role == Qt.ToolTipRole:
@@ -330,7 +335,7 @@ class SongTable(QTableView):
             if c in ("cover", "fav"):
                 hh.setSectionResizeMode(i, QHeaderView.Fixed)
 
-    DROP_ORDER = ["added", "plays", "genre", "year", "album", "cover", "track"]
+    DROP_ORDER = ["added", "last", "plays", "genre", "year", "album", "cover", "track"]
 
     def resizeEvent(self, e):  # noqa: N802
         super().resizeEvent(e)

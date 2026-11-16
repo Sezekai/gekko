@@ -75,6 +75,21 @@ def main(out: str) -> int:
                        "night-time stories about trains, harbours and radio signals. Their debut album Northern "
                        "Static was released in 2019, followed by Paper Comets in 2022.", bio_source="Wikipedia",
                    bio_url="https://en.wikipedia.org/wiki/Example")
+    # some listening history over the last few weeks, with repeats in a row
+    now = time.time()
+    hist_rows = db.songs()
+    t = now - 21 * 86400
+    k = 0
+    while t < now - 600:
+        r = hist_rows[k % len(hist_rows)] if rnd.random() > 0.25 else hist_rows[(k - 1) % len(hist_rows)]
+        counted = rnd.random() > 0.15
+        dur = r["duration"] or 200
+        db.add_listen(r["id"], t, dur if counted else 12.0, dur, rnd.choice(["Album: Northern Static", "All songs",
+                      "Playlist: Late night drive", "History"]), r["title"], r["artist"])
+        if counted:
+            db.x("UPDATE listens SET counted=1 WHERE id=(SELECT MAX(id) FROM listens)")
+        k += 1
+        t += rnd.choice([240, 300, 3600, 5 * 3600, 20 * 3600])
     pid = db.add_playlist("Late night drive", "#9b86ff")
     db.add_to_playlist(pid, [r["id"] for r in db.songs()][:9])
     db.add_playlist("Short favourites", "#2fe0c0", {"filter": {"fav": True, "len_max": 600}, "order": "shortest"})
@@ -106,6 +121,18 @@ def main(out: str) -> int:
     ok = True
     try:
         for width in (1100, 1440, 1920):
+            w.go("history")
+            w.history_page.view.set_value("list")
+            w.history_page._view("list")
+            shot("history", width)
+            w.history_page.view.set_value("grid")
+            w.history_page._view("grid")
+            shot("history-grid", width)
+            w.history_page.view.set_value("list")
+            w.history_page._view("list")
+            w.history_page.range.set_preset("custom")
+            shot("history-dates", width)
+            w.history_page.range.set_preset("all")
             for key in ("songs", "albums", "artists", "genres", "playlists", "folders", "tidy", "look", "settings"):
                 w.go(key)
                 settle(0.3)

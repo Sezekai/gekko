@@ -139,7 +139,8 @@ class FullPlayer(QFrame):
         # right: queue / artist / details
         right = QVBoxLayout()
         right.setSpacing(8)
-        self.tabs = Segmented([("queue", "Up next"), ("artist", "Artist"), ("details", "Song details")], "queue")
+        self.tabs = Segmented([("queue", "Up next"), ("artist", "Artist"), ("details", "Details"), ("history", "History")],
+                              "queue")
         self.tabs.changed.connect(self._tab)
         right.addWidget(self.tabs)
         self.stack = QStackedWidget()
@@ -170,6 +171,9 @@ class FullPlayer(QFrame):
         self.grid.setVerticalSpacing(6)
         dsc.setWidget(dw)
         self.stack.addWidget(dsc)
+        from .history import SongHistory
+        self.song_history = SongHistory()
+        self.stack.addWidget(self.song_history)
         right.addWidget(self.stack, 1)
         rw = QWidget()
         rw.setObjectName("transparent")
@@ -201,7 +205,7 @@ class FullPlayer(QFrame):
         self.cover.set_size(s)
 
     def _tab(self, k: str) -> None:
-        self.stack.setCurrentIndex({"queue": 0, "artist": 1, "details": 2}[k])
+        self.stack.setCurrentIndex({"queue": 0, "artist": 1, "details": 2, "history": 3}[k])
 
     def _context(self) -> None:
         self.context.setText(f"Playing from {self.pb.context}" if self.pb.context else "")
@@ -236,6 +240,7 @@ class FullPlayer(QFrame):
         self.lyrics.set_song(sid)
         self.artist_box.set_artist(main_artist(r["artist"]))
         self._fill_details(sid)
+        self.song_history.set_song(sid)
 
     def _fill_details(self, sid: int | None) -> None:
         from .widgets import clear_layout

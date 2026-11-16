@@ -89,6 +89,8 @@ class Playback(QObject):
         self._row = None
         self._played_s = 0.0
         self._last_pos = 0.0
+        self._hist_id: int | None = None
+        self._hist_saved = 0.0
         self.engine.set_volume(self.volume)
         self.engine.positionChanged.connect(self._on_pos)
         self.engine.durationChanged.connect(self.durationChanged.emit)
@@ -227,6 +229,7 @@ class Playback(QObject):
         self._changed()
 
     def clear(self) -> None:
+        self._hist_close()
         self.engine.unload()
         self.queue, self.index, self._row = [], -1, None
         self.context = ""
@@ -357,6 +360,7 @@ class Playback(QObject):
 
     # ---- inside ---------------------------------------------------------------------------------------
     def _start(self, i: int, play: bool = True, at: float = 0.0) -> None:
+        self._hist_close()
         db = get_db()
         tried = 0
         while 0 <= i < len(self.queue) and tried < len(self.queue):
@@ -408,6 +412,7 @@ class Playback(QObject):
     def _on_advanced(self) -> None:
         """The preloaded song started (gapless)."""
         self._count_play()
+        self._hist_close()
         ni = self._next_index()
         if ni is None:
             return
@@ -423,6 +428,7 @@ class Playback(QObject):
 
     def _on_finished(self) -> None:
         self._count_play()
+        self._hist_close()
         if self.sleep_after_song:
             self.sleep_after_song = False
             self.modesChanged.emit()
@@ -446,6 +452,7 @@ class Playback(QObject):
         if 0 < p - self._last_pos < 2:
             self._played_s += p - self._last_pos
         self._last_pos = p
+        self._hist_track()
         d = self.duration()
         if not self._counted and d and self._played_s >= d * float(get_settings().get("playback.count_after", 0.5)):
             self._count_play()
@@ -460,7 +467,48 @@ class Playback(QObject):
         if self._row is not None and not self._counted:
             self._counted = True
             get_db().add_play(self._row["id"])
+            if self._hist_id is None:
+                self._hist_open()
+            if self._hist_id is not None:
+                get_db().update_listen(self._hist_id, self._heard(), True)
+                hub.historyChanged.emit()
             hub.songChanged.emit(self._row["id"])
+
+    # ---- listening history ----------------------------------------------------------------------------
+    # Every time a song plays for at least a second it gets an entry: when, how long was heard, and whether that
+    # counted as a listen (the same rule as the play count) or a skip. Playing it again - straight away or later -
+    # makes another entry.
+    def _heard(self) -> float:
+        d = self.duration()
+        return min(self._played_s, d) if d else self._played_s
+
+    def _hist_open(self) -> None:
+        r = self._row
+        if r is None:
+            return
+        import time as _t
+        self._hist_id = get_db().add_listen(r["id"], _t.time() - self._played_s, self._heard(),
+                                            r["duration"] or None, self.context, r["title"], r["artist"])
+        self._hist_saved = self._played_s
+        hub.historyChanged.emit()
+
+    def _hist_track(self) -> None:
+        if self._row is None or self._played_s < 1.0:
+            return
+        if self._hist_id is None:
+            self._hist_open()
+        elif self._played_s - self._hist_saved >= 10:
+            self._hist_saved = self._played_s
+            get_db().update_listen(self._hist_id, self._heard())
+
+    def _hist_close(self) -> None:
+        if self._hist_id is not None:
+            try:
+                get_db().update_listen(self._hist_id, self._heard(), self._counted)
+            except Exception as e:
+                log.info("couldn't save a listen: %s", e)
+            self._hist_id = None
+            hub.historyChanged.emit()
 
     def _count_skip(self) -> None:
         if self._row is not None and not self._counted and self.engine.position() < 30 and self.is_playing():
@@ -502,6 +550,7 @@ class Playback(QObject):
         self.modesChanged.emit()
 
     def shutdown(self) -> None:
+        self._hist_close()
         self.save_state()
         self.engine.shutdown()
 

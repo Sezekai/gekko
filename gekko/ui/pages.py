@@ -895,7 +895,8 @@ class PlaylistsPage(Page):
             except Exception:
                 spec = {}
             f = filters.clean(spec.get("filter"))
-            rows = [r for r in lib.rows if filters.match(f, r)]
+            pf = filters.prepare(f)
+            rows = [r for r in lib.rows if filters.match(pf, r)]
             from .playback import order_ids
             order = spec.get("order") or "in_order"
             if order != "in_order":
@@ -1080,7 +1081,8 @@ class PlaylistsPage(Page):
 
         def upd():
             f = form.get()
-            n = sum(1 for r in get_library().rows if filters.match(f, r))
+            pf = filters.prepare(f)
+            n = sum(1 for r in get_library().rows if filters.match(pf, r))
             if lim.value():
                 n = min(n, lim.value())
             count.setText(f"{n:,} songs match right now.")

@@ -110,6 +110,13 @@ QFrame#sidepanel {{ background: {surf('panel', 0.15)}; border-left: 1px solid {c
 QFrame#fullplayer {{ background: {surf('ground', 0.1)}; }}
 QFrame#mini {{ background: {c['panel']}; border: 1px solid {c['line2']}; }}
 QListView#grid {{ background: transparent; border: none; }}
+QCalendarWidget QWidget {{ background: {c['panel']}; color: {c['text']}; alternate-background-color: {c['raised']}; }}
+QCalendarWidget QWidget#qt_calendar_navigationbar {{ background: {c['raised']}; }}
+QCalendarWidget QToolButton {{ color: {c['text']}; background: transparent; border: none; padding: 4px 8px; font-weight: 600; }}
+QCalendarWidget QToolButton:hover {{ background: {c['raised2']}; border-radius: 4px; }}
+QCalendarWidget QAbstractItemView {{ background: {c['panel']}; color: {c['text']}; selection-background-color: {c['acc']}; selection-color: {c['on_acc']}; outline: none; }}
+QCalendarWidget QAbstractItemView:disabled {{ color: {c['faint']}; }}
+QCalendarWidget QSpinBox {{ background: {c['raised']}; }}
 QSplitter::handle:horizontal {{ background: transparent; }}
 QToolTip {{ background: {c['raised2']}; color: {c['text']}; border: 1px solid {c['line2']}; padding: 4px 7px; border-radius: {rc}px; }}
 QLabel {{ background: transparent; }}
@@ -175,16 +182,16 @@ QFrame#pill {{ background: {surf('raised', 0.2)}; border: 1px solid {c['line']};
 QFrame#pill:hover {{ border-color: {c['line2']}; }}
 QFrame#hwchip {{ background: {surf('raised', 0.2)}; border: 1px solid {c['line']}; border-radius: 11px; }}
 
-QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{
+QLineEdit, QSpinBox, QDoubleSpinBox, QDateEdit, QComboBox {{
     background: {surf('field', 0.25)}; border: 1px solid {c['line']}; border-radius: {rc}px; padding: 0 8px;
     min-height: {inner}px; max-height: {inner}px; selection-background-color: {acc}; selection-color: {on}; }}
 QPlainTextEdit, QTextBrowser, QTextEdit {{ background: {surf('field', 0.25)}; border: 1px solid {c['line']}; border-radius: {rc}px;
     padding: 4px 6px; selection-background-color: {acc}; selection-color: {on}; }}
 QPlainTextEdit#log {{ font-family: "JetBrains Mono", Consolas; font-size: {fs - 1}px; border: none; border-radius: 0; background: transparent; }}
-QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QPlainTextEdit:focus {{ border-color: {ol}; }}
-QLineEdit:disabled, QComboBox:disabled {{ color: {c['faint']}; }}
-QComboBox::drop-down {{ border: none; width: 20px; }}
-QComboBox::down-arrow {{ image: url(nv:chevron.svg); width: 12px; height: 12px; }}
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus, QComboBox:focus, QPlainTextEdit:focus {{ border-color: {ol}; }}
+QLineEdit:disabled, QComboBox:disabled, QDateEdit:disabled, QSpinBox:disabled {{ color: {c['faint']}; }}
+QComboBox::drop-down, QDateEdit::drop-down {{ border: none; width: 20px; }}
+QComboBox::down-arrow, QDateEdit::down-arrow {{ image: url(nv:chevron.svg); width: 12px; height: 12px; }}
 QComboBox QAbstractItemView {{ background: {c['panel']}; border: 1px solid {c['line2']}; selection-background-color: {c['raised2']}; padding: 3px; outline: 0; }}
 QSpinBox::up-button, QSpinBox::down-button, QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{ width: 0; border: none; }}
 QCheckBox, QRadioButton {{ spacing: 7px; background: transparent; }}

@@ -41,6 +41,20 @@ A music player for the songs on your own drives, built on Nirvash's look.
   the queue or one song, sleep timer, and picking up where you left off.
 - **Lyrics:** timed lyrics light up line by line (click a line to jump there); plain lyrics scroll.
 
+**History**
+
+- **Every play is listed**, in order and with when: play a song twice in a row and it's there twice (marked
+  "↻ 2nd in a row"); play A, then B, then A and A is listed twice. Songs skipped before they count as a listen are
+  shown greyed (or hidden with Show skips).
+- **Grouped** by day, week, month or year, as a list (every play) or a cover grid (each song once per group, with
+  how many times).
+- **Any span of days**: today, this week, this month, this year, the last 7 or 30 days, or two dates picked on a
+  calendar. "Play these" plays what you listened to then; "Songs not listened to in this time" opens the rest.
+- **Each song's own history** (right-click > Listening history, I, or the full-screen player's History tab):
+  listens, skips, first and last time, time listened, and every play.
+- **Filters** for listens: listened to / not listened to in any span of days (smart playlists too, e.g. "not
+  played in the last 30 days"), and play counts from-to. Song lists have a Last played column.
+
 **Finding out what songs are, and tidying them**
 
 - Songs with no title or artist are **identified from their sound** in the background (Shazam; AcoustID and
@@ -82,6 +96,7 @@ the suite (now with outline and highlight colours).
 | V | Favourite |
 | [ ] | Rating down / up half a star |
 | E | Edit info |
+| I | Listening history of the song |
 | Delete / Shift+Delete | Remove from library / send to the Recycle Bin (both ask first) |
 | Home End | First / last in the list |
 

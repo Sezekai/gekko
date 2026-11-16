@@ -70,6 +70,18 @@ CREATE TABLE IF NOT EXISTS moves (
     song_id INTEGER, note TEXT, tags_before TEXT, undone INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS listens (
+    id INTEGER PRIMARY KEY,
+    song_id INTEGER NOT NULL,
+    at REAL NOT NULL,                        -- when it started playing
+    played REAL NOT NULL DEFAULT 0,          -- seconds actually heard
+    length REAL,                             -- the song's length then
+    counted INTEGER NOT NULL DEFAULT 0,      -- 1 = heard enough to count as a listen (else a skip)
+    context TEXT,                            -- what it was played from ("Album: Blue")
+    title TEXT, artist TEXT                  -- kept in case the song later leaves the library
+);
+CREATE INDEX IF NOT EXISTS listens_at ON listens(at);
+CREATE INDEX IF NOT EXISTS listens_song ON listens(song_id, at);
 """
 
 # Columns every listing needs (the long ones - lyrics, tags - are read only for one song at a time).
@@ -356,6 +368,57 @@ class DB:
 
     def clear_moves(self) -> None:
         self.x("DELETE FROM moves")
+
+    # ---- listening history ------------------------------------------------------------------------
+    def add_listen(self, song_id: int, at: float, played: float, length: float | None, context: str,
+                   title: str | None, artist: str | None) -> int:
+        return int(self.x("INSERT INTO listens(song_id, at, played, length, counted, context, title, artist) "
+                          "VALUES(?, ?, ?, ?, 0, ?, ?, ?)", (song_id, at, played, length, context, title, artist)))
+
+    def update_listen(self, lid: int, played: float, counted: bool | None = None) -> None:
+        if counted is None:
+            self.x("UPDATE listens SET played=? WHERE id=?", (played, lid))
+        else:
+            self.x("UPDATE listens SET played=?, counted=? WHERE id=?", (played, 1 if counted else 0, lid))
+
+    def listens(self, start: float | None = None, end: float | None = None, song_id: int | None = None,
+                limit: int | None = None) -> list[sqlite3.Row]:
+        """Newest first. start/end are times (end not included)."""
+        where, args = [], []
+        if start is not None:
+            where.append("at >= ?")
+            args.append(start)
+        if end is not None:
+            where.append("at < ?")
+            args.append(end)
+        if song_id is not None:
+            where.append("song_id = ?")
+            args.append(song_id)
+        sql = "SELECT * FROM listens" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY at DESC, id DESC"
+        if limit:
+            sql += f" LIMIT {int(limit)}"
+        return self.q(sql, args)
+
+    def listened_ids(self, start: float | None, end: float | None, counted_only: bool = True) -> set[int]:
+        where, args = (["counted=1"] if counted_only else []), []
+        if start is not None:
+            where.append("at >= ?")
+            args.append(start)
+        if end is not None:
+            where.append("at < ?")
+            args.append(end)
+        sql = "SELECT DISTINCT song_id FROM listens" + (" WHERE " + " AND ".join(where) if where else "")
+        return {r[0] for r in self.q(sql, args)}
+
+    def delete_listens(self, ids: list[int]) -> None:
+        self.many("DELETE FROM listens WHERE id=?", [(i,) for i in ids])
+
+    def clear_listens(self) -> None:
+        self.x("DELETE FROM listens")
+
+    def listen_count(self) -> int:
+        r = self.one("SELECT COUNT(*) FROM listens")
+        return int(r[0]) if r else 0
 
     # ---- resets ----------------------------------------------------------------------------------
     def reset_library(self) -> None:

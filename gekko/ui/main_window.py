@@ -295,10 +295,11 @@ def set_topmost(win: QWidget, on: bool) -> None:
 
 class MainWindow(QMainWindow):
     PAGES = [("songs", "Songs", "note"), ("albums", "Albums", "disc"), ("artists", "Artists", "users"),
-             ("genres", "Genres", "genre"), ("playlists", "Playlists", "playlist"), ("folders", "Folders", "folder"),
+             ("genres", "Genres", "genre"), ("playlists", "Playlists", "playlist"), ("history", "History", "clock"),
+             ("folders", "Folders", "folder"),
              ("tidy", "Tidy up", "broom")]
     BOTTOM = [("look", "Look", "look"), ("settings", "Settings", "gear"), ("keys", "Keys", "keys"), ("log", "Log", "log")]
-    TITLES = {"songs": "Songs", "albums": "Albums", "artists": "Artists", "genres": "Genres", "playlists": "Playlists",
+    TITLES = {"songs": "Songs", "albums": "Albums", "artists": "Artists", "genres": "Genres", "playlists": "Playlists", "history": "History",
               "folders": "Folders", "tidy": "Tidy up", "look": "Appearance", "settings": "Settings"}
 
     def __init__(self):
@@ -383,11 +384,13 @@ class MainWindow(QMainWindow):
         self.playlists_page = PlaylistsPage()
         self.folders_page = FoldersPage(self.scan)
         self.tidy_page = TidyPage()
+        from .history import HistoryPage
+        self.history_page = HistoryPage()
         self.look_page = LookPage()
         self.settings_page = SettingsPage(self.scan)
         self.pages = {"songs": self.songs_page, "albums": self.albums_page, "artists": self.artists_page,
                       "genres": self.genres_page, "playlists": self.playlists_page, "folders": self.folders_page,
-                      "tidy": self.tidy_page, "look": self.look_page, "settings": self.settings_page}
+                      "tidy": self.tidy_page, "history": self.history_page, "look": self.look_page, "settings": self.settings_page}
         for p in self.pages.values():
             self.stack.addWidget(p)
         self.split.addWidget(self.stack)
@@ -644,6 +647,7 @@ class MainWindow(QMainWindow):
         sc("[", lambda: actions.nudge_rating(self._targets(), -1))
         sc("]", lambda: actions.nudge_rating(self._targets(), 1))
         sc("E", lambda: actions.edit_info(self, self._targets()))
+        sc("I", self._song_history)
         sc("Delete", self._delete)
         sc("Shift+Delete", lambda: actions.recycle(self, self._targets(False)))
         sc("Home", lambda: self._page_call("key_first"))
@@ -663,6 +667,12 @@ class MainWindow(QMainWindow):
         if not ids and playing_too and self.pb.current_id() is not None:
             ids = [self.pb.current_id()]
         return ids
+
+    def _song_history(self) -> None:
+        ids = self._targets()
+        if ids:
+            from .history import song_history_dialog
+            song_history_dialog(self, ids[0])
 
     def _delete(self) -> None:
         from .queue_view import QueueList

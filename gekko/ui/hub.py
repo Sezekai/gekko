@@ -16,7 +16,8 @@ class Hub(QObject):
     movesChanged = Signal()          # the move log changed
     themeChanged = Signal()          # the look changed (Appearance)
     goto = Signal(str, object)       # open a screen: ("artist", name), ("album", (album, artist)), ("genre", g)…
-    tidyCount = Signal(int)          # songs waiting in Tidy up
+    tidyCount = Signal(int)
+    historyChanged = Signal()        # a listen was added, finished or removed          # songs waiting in Tidy up
 
 
 hub = Hub()

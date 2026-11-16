@@ -491,6 +491,8 @@ class SettingsPage(QWidget):
             (f"Skips ({nskip})", "Folders not added and songs removed can come back with the next scan", self._reset_skips),
             ("Artist profiles", "Bios and photos are looked up again", self._reset_artists),
             ("Lookups", "Look every song up again (lyrics, covers, genres)", self._reset_lookups),
+            (f"History ({db.listen_count():,})", "Forget every listen in the history (play counts stay)",
+             self._reset_history),
             (f"Move log ({nm})", "Forget the list of renames and moves (Undo stops working for them)", self._reset_moves),
             ("Cache", "Covers, photos and sound waves; made again when needed", self.clear_cache),
             ("Logs", "Empty the log files", self._clear_logs),
@@ -554,6 +556,13 @@ class SettingsPage(QWidget):
             w = self.window()
             if hasattr(w, "identify"):
                 w.identify.poke()
+
+    def _reset_history(self) -> None:
+        if dialogs.ask(self, "Forget the listening history?", "Every entry on the History screen is deleted. Play "
+                       "counts, ratings and favourites stay.", "Forget the history", danger=True):
+            get_db().clear_listens()
+            hub.historyChanged.emit()
+            self.build()
 
     def _reset_moves(self) -> None:
         if dialogs.ask(self, "Forget the move log?", "The list of renames and moves is cleared, so they can't be "

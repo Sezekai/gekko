@@ -316,6 +316,11 @@ def song_menu(parent: QWidget, ids: list[int], context_rows=None, playlist_id: i
         act("Go to artist", "user", lambda: go_artist(first), bool(first["artist"]))
         act("Go to album", "disc", lambda: go_album(first), bool(first["album"]))
     act("Edit info…", "edit", lambda: edit_info(parent, ids), shortcut="E")
+    if len(rows) == 1:
+        def hist():
+            from .history import song_history_dialog
+            song_history_dialog(parent, ids[0])
+        act("Listening history…", "clock", hist, shortcut="I")
     lm = m.addMenu(icon("search", C["text"], 16), "Look up again")
     lm.addAction("Identify from the sound").triggered.connect(lambda: identify_again(ids))
     lm.addAction("Try harder (sped-up or slowed-down edits)").triggered.connect(lambda: identify_again(ids, True))

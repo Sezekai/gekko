@@ -376,6 +376,9 @@ class AudioEngine(QObject):
             self.playingChanged.emit(not paused)
 
     def shutdown(self) -> None:
+        if hasattr(self, "_fake"):
+            self._fake.stop()
+            self._cur = None
         if self._mpv is not None:
             try:
                 self._mpv.terminate()
