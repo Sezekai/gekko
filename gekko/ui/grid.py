@@ -150,7 +150,13 @@ class CoverGrid(QListView):
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._menu)
         self.setObjectName("grid")
-        get_covers().ready.connect(lambda _k: self.viewport().update() if self.isVisible() else None)
+        # a method, not a lambda: Qt drops the connection when the grid is deleted (album and artist pages
+        # build new grids each time)
+        get_covers().ready.connect(self._cover_ready)
+
+    def _cover_ready(self, _key: str) -> None:
+        if self.isVisible():
+            self.viewport().update()
 
     def set_items(self, items: list[dict]) -> None:
         self.model_.set_items(items)

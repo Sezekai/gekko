@@ -73,6 +73,18 @@ def _frame_thickness(hwnd: int) -> tuple[int, int]:
     return sm(32) + pad, sm(33) + pad  # SM_CXFRAME, SM_CYFRAME
 
 
+def maximised_margins(win: QWidget) -> int:
+    """How far a maximised window hangs over each screen edge, in Qt's pixels (0 when not maximised)."""
+    if not ENABLED or not (win.windowFlags() & Qt.FramelessWindowHint) or not win.isMaximized() or win.isFullScreen():
+        return 0
+    try:
+        fx, fy = _frame_thickness(int(win.winId()))
+    except Exception:
+        return 0
+    dpr = win.devicePixelRatioF() or 1.0
+    return int(round(max(fx, fy) / dpr))
+
+
 def native_event(win, event_type, message, title_bar: QWidget | None):
     """Handle the two messages; returns (True, result) when handled, else None."""
     if not ENABLED or event_type != b"windows_generic_MSG" or not (win.windowFlags() & Qt.FramelessWindowHint):
@@ -80,16 +92,9 @@ def native_event(win, event_type, message, title_bar: QWidget | None):
     from ctypes import wintypes
     msg = wintypes.MSG.from_address(int(message))
     if msg.message == WM_NCCALCSIZE and msg.wParam:
-        if win.isMaximized() and not win.isFullScreen():
-            class RECT(ctypes.Structure):
-                _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long), ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
-
-            r = RECT.from_address(msg.lParam)          # NCCALCSIZE_PARAMS.rgrc[0] comes first
-            fx, fy = _frame_thickness(int(msg.hWnd))
-            r.left += fx
-            r.top += fy
-            r.right -= fx
-            r.bottom -= fy
+        # The whole window is client area, always. (Shrinking it here when maximised left Qt out of step with
+        # Windows: the edges were cut off, and after restoring, a strip at the top went unpainted.) A maximised
+        # window hangs over the screen edges by the frame thickness; maximised_margins() pads the content instead.
         return True, 0
     if msg.message == WM_NCHITTEST:
         u = ctypes.windll.user32

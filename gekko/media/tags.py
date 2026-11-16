@@ -98,10 +98,11 @@ def read(path: str | Path) -> dict[str, Any]:
     try:
         f = mutagen.File(str(path), easy=True)
     except Exception as e:
-        log.info("can't read tags of %s: %s", path, e)
-        f = None
+        log.info("%s: the audio can't be read by the tag reader (%s); reading its tags and length another way",
+                 Path(str(path)).name, e)
+        return _read_fallback(path, out)
     if f is None:
-        return out
+        return _read_fallback(path, out)
     info = getattr(f, "info", None)
     if info is not None:
         out["duration"] = float(getattr(info, "length", 0.0) or 0.0)
@@ -128,6 +129,44 @@ def read(path: str | Path) -> dict[str, Any]:
         out["has_pic"], out["lyrics"] = _pic_and_lyrics(raw)
     except Exception:
         pass
+    return out
+
+
+def _read_fallback(path, out: dict[str, Any]) -> dict[str, Any]:
+    """For files whose audio mutagen can't follow (odd MP3s): the ID3 tags on their own, and the length, bitrate
+    and format from ffprobe."""
+    try:
+        from mutagen.easyid3 import EasyID3
+        t = EasyID3(str(path))
+        for k, ek in EASY.items():
+            v = t.get(ek)
+            out[k] = _num(v) if k in ("track", "disc") else (_year(v) if k == "year" else _first(v))
+    except Exception:
+        pass
+    try:
+        from mutagen.id3 import ID3
+        out["has_pic"], out["lyrics"] = _pic_and_lyrics(type("R", (), {"tags": ID3(str(path)), "pictures": None})())
+    except Exception:
+        pass
+    try:
+        from . import ff
+        pr = ff.probe(path)
+        out["duration"] = pr.duration
+        fmt = pr.raw.get("format", {})
+        out["bitrate"] = int(fmt.get("bit_rate") or 0) or None
+        a = next((st for st in pr.streams if st.kind == "audio"), None)
+        if a is not None:
+            out["sample_rate"] = int(a.raw.get("sample_rate") or 0) or None
+            out["codec"] = _codec_name(a.codec, path)
+        if not any(out.get(k) for k in ("title", "artist")):
+            tg = {k.lower(): v for k, v in (fmt.get("tags") or {}).items()}
+            for k, names in (("title", ("title",)), ("artist", ("artist",)), ("album", ("album",)),
+                             ("album_artist", ("album_artist", "albumartist")), ("genre", ("genre",))):
+                out[k] = next((tg[n] for n in names if tg.get(n)), out.get(k))
+            out["track"] = out.get("track") or _num(tg.get("track"))
+            out["year"] = out.get("year") or _year(tg.get("date") or tg.get("year"))
+    except Exception as e:
+        log.warning("can't read %s at all: %s", Path(str(path)).name, e)
     return out
 
 

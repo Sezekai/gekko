@@ -121,8 +121,16 @@ class ArtistSnippet(QWidget):
         row.addWidget(self.open_btn)
         row.addStretch(1)
         lay.addLayout(row)
-        hub.artistChanged.connect(lambda n: self.set_artist(self.name) if n.casefold() == self.name.casefold() else None)
-        get_covers().ready.connect(lambda k: self._photo() if k == f"artist:{self.name}" else None)
+        hub.artistChanged.connect(self._artist_changed)
+        get_covers().ready.connect(self._cover_ready)
+
+    def _artist_changed(self, n: str) -> None:
+        if self.name and n.casefold() == self.name.casefold():
+            self.set_artist(self.name)
+
+    def _cover_ready(self, k: str) -> None:
+        if self.name and k == f"artist:{self.name}":
+            self._photo()
 
     def set_artist(self, name: str) -> None:
         self.name = name or ""

@@ -311,7 +311,7 @@ class SongTable(QTableView):
         self._apply_cols()
         pb = get_playback()
         pb.currentChanged.connect(self._playing_changed)
-        pb.playingChanged.connect(lambda _on: self.viewport().update())
+        pb.playingChanged.connect(self._playing_toggled)
         self.model_.playing = pb.current_id()
         get_covers().ready.connect(self._cover_ready)
         get_library().songUpdated.connect(self._song_updated)
@@ -452,6 +452,9 @@ class SongTable(QTableView):
                 get_playback().toggle()
                 return
         super().mousePressEvent(e)
+
+    def _playing_toggled(self, _on: bool) -> None:
+        self.viewport().update()
 
     def _playing_changed(self, sid: int) -> None:
         self.model_.playing = sid if sid >= 0 else None

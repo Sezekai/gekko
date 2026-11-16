@@ -467,13 +467,23 @@ class MainWindow(QMainWindow):
         if self.native_frame and not getattr(self, "_styled", False):
             self._styled = True
             frameless.after_show(self)
+        self._fit_frame()
         QTimer.singleShot(0, self._fit_side)
 
     def changeEvent(self, e):
         if e.type() == QEvent.WindowStateChange:
             self.title_bar.sync()
             self.title_bar.setVisible(not self.isFullScreen())
+            self._fit_frame()
+            QTimer.singleShot(0, self._fit_frame)
         super().changeEvent(e)
+
+    def _fit_frame(self) -> None:
+        """Keep everything on screen when maximised (the window itself reaches past the screen edges)."""
+        m = frameless.maximised_margins(self) if self.native_frame else 0
+        lay = self.centralWidget().layout()
+        if lay is not None and lay.contentsMargins().left() != m:
+            lay.setContentsMargins(m, m, m, m)
 
     # ---- navigation ------------------------------------------------------------------------------------
     def go(self, key: str) -> None:

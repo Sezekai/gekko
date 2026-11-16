@@ -94,7 +94,8 @@ def scan(ctx: JobContext, only: list[str] | None = None) -> dict:
             continue
         if r["missing"]:
             back.append(r["id"])
-        if r["size"] != size or abs((r["mtime"] or 0) - mtime) > 1:
+        # changed on disk, or read badly before (no length: older versions couldn't read some MP3s)
+        if r["size"] != size or abs((r["mtime"] or 0) - mtime) > 1 or not r["duration"]:
             todo_changed.append((r["id"], full, size, mtime, r["file_synced"]))
     if back:
         db.update_songs(back, missing=0)

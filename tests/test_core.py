@@ -212,3 +212,20 @@ def test_measure_loudness(fresh):
     tone(p, 4, 440, fmt="flac")
     lufs, peak = level.measure(p)
     assert -40 < lufs < 0 and peak < 0
+
+
+def test_odd_mp3_still_gets_its_tags_and_length(fresh, monkeypatch):
+    """MP3s the tag reader can't follow ("can't sync to MPEG frame") keep their ID3 tags; ffprobe gives the length."""
+    import mutagen
+    from mutagen.mp3 import HeaderNotFoundError
+    from gekko.media import tags
+    p = fresh / "odd.mp3"
+    tone(p, 4, 440, {"title": "Liberi Fatali", "artist": "Nobuo Uematsu", "album": "Distant Worlds"})
+
+    def broken(*a, **k):
+        raise HeaderNotFoundError("can't sync to MPEG frame")
+
+    monkeypatch.setattr(mutagen, "File", broken)
+    t = tags.read(p)
+    assert (t["title"], t["artist"], t["album"]) == ("Liberi Fatali", "Nobuo Uematsu", "Distant Worlds")
+    assert 3.5 < t["duration"] < 5

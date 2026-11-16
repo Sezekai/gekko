@@ -180,3 +180,29 @@ def test_remove_from_library(win, qapp):
     actions.remove_from_library(win, [r["id"]])          # dialogs answer "accept" in tests
     assert get_db().song(r["id"]) is None
     assert any(x["path"] == r["path"] for x in get_db().removed())
+
+
+def test_pages_built_again_leave_nothing_behind(win, qapp, monkeypatch):
+    """Album, artist and genre pages make new lists and grids each time; the old ones must stop listening."""
+    import sys
+    errors = []
+    monkeypatch.setattr(sys, "excepthook", lambda *a: errors.append(a))
+    from gekko.ui.covers import get_covers
+    from gekko.ui.hub import hub
+    for _ in range(3):
+        hub.goto.emit("artist", "Aurora Lane")
+        settle(qapp, 0.1)
+        hub.goto.emit("genre", "Synthpop")
+        settle(qapp, 0.1)
+        win.genres_page.b._view("grid", save=False)
+        hub.goto.emit("album", win.lib.albums()[0]["key"])
+        settle(qapp, 0.1)
+    from PySide6.QtCore import QCoreApplication, QEvent
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)    # the old pages really go
+    get_covers().ready.emit("song:1")
+    get_covers().ready.emit("artist:Aurora Lane")
+    hub.artistChanged.emit("Aurora Lane")
+    win.pb.play_ids([r["id"] for r in win.lib.rows][:2])
+    win.pb.toggle()
+    settle(qapp, 0.3)
+    assert not errors, errors

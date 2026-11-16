@@ -1,12 +1,8 @@
-Gekko 1.0.0: the first version, with everything from the plan.
+Gekko 1.0.1: fixes from the first test.
 
-- Plays the music in any folders you add, on any drive. Checks them for new songs each time it opens; songs you remove and folders you mark "Don't add" never come back.
-- Browse songs, albums, artists (with bios and photos), genres, folders and playlists, as lists or cover grids, with filters that each have an opposite.
-- Half-star ratings, favourites, your own playlists and smart playlists.
-- Music keeps playing on every screen, with the Now playing panel (cover, details, lyrics, artist, queue), a full-screen player and a mini player. Nirvash's sound wave in the player bar.
-- A queue, play orders (shuffle, reversed, by length, by release date, by rating…), gapless playback, even volume, repeat, sleep timer.
-- Unknown songs are identified from their sound; lyrics, covers, genres and years are filled in.
-- Tidy up renames, tags and sorts songs into E:\Music\Artist\Album after you review it, with Undo.
-- Keyboard shortcuts on every screen (K shows them).
+- When maximised, the window no longer runs past the screen edges and gets cut off.
+- The white strip that could appear along the top of the window is gone.
+- Opening a grid (Genres, Albums or an artist's page) no longer fills the log with "CoverGrid already deleted" errors.
+- MP3s the tag reader couldn't follow ("can't sync to MPEG frame") now keep their own titles, artists, albums and lengths. Songs that were read wrongly before are read again at the next start.
 
-Extract Gekko.zip into E:\Pictures so the program sits at E:\Pictures\Gekko\App\Gekko.exe.
+Replace the App folder in E:\Pictures\Gekko with the one in Gekko.zip.
