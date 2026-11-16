@@ -100,7 +100,7 @@ def _guess_from_name(stem: str) -> dict:
     stem = re.sub(r"\s*[\[(](official|lyrics?|audio|video|hd|hq|mv)[^\])]*[\])]", "", stem, flags=re.I)
     if " - " in stem:
         a, t = stem.split(" - ", 1)
-        if a.strip() and t.strip():
+        if a.strip() and t.strip() and not re.fullmatch(r"[\d\s._-]+", a):
             return {"artist": a.strip(), "title": t.strip()}
     return {}
 

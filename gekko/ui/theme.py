@@ -202,13 +202,19 @@ QRadioButton::indicator {{ width: 14px; height: 14px; border-radius: 7px; border
 QRadioButton::indicator:checked {{ background: {acc}; border: 3px solid {c['field']}; }}
 
 QTableView, QListWidget, QTreeWidget, QListView, QTreeView {{ background: {surf('field', 0.2)}; border: 1px solid {c['line']}; border-radius: {rp}px;
-    alternate-background-color: {rgba(c['text'], 0.022)}; gridline-color: transparent; selection-background-color: {sel};
+    alternate-background-color: {rgba(c['text'], 0.05)}; gridline-color: transparent; selection-background-color: {sel};
     selection-color: {c['text']}; }}
 QTableView::item, QListWidget::item, QTreeWidget::item {{ padding: 0 6px; border: none; }}
-QTableView::item:hover, QListWidget::item:hover, QTreeWidget::item:hover {{ background: {rgba(c['text'], 0.035)}; }}
+QTableView::item:hover, QListWidget::item:hover, QTreeWidget::item:hover {{ background: {rgba(c['text'], 0.08)}; }}
 QTableView::item:selected, QListWidget::item:selected, QTreeWidget::item:selected {{ background: {sel}; }}
 QHeaderView {{ background: transparent; }}
+QTableView::indicator, QTreeView::indicator, QListView::indicator {{ width: 16px; height: 16px; border-radius: {min(4, rc)}px;
+    border: 1px solid {c['line2']}; background: {c['field']}; }}
+QTableView::indicator:checked, QTreeView::indicator:checked, QListView::indicator:checked {{ background: {acc};
+    border-color: {acc}; image: url(nv:check.svg); }}
+QTableView::indicator:unchecked:hover, QTreeView::indicator:unchecked:hover {{ border-color: {acc}; }}
 QHeaderView::section {{ background: {surf('panel', 0.2)}; color: {c['sec']}; border: none; border-bottom: 1px solid {c['line']};
+    border-right: 1px solid {rgba(c['line2'], 0.7)};
     padding: 0 8px; height: {ch}px; font-size: {fs - 1}px; font-weight: 600; }}
 QHeaderView::down-arrow, QHeaderView::up-arrow {{ width: 9px; height: 9px; subcontrol-position: center right; right: 4px; }}
 QHeaderView::up-arrow {{ image: url(nv:sort_up.svg); }}

@@ -252,3 +252,45 @@ def test_history_records_every_play_in_order(win, qapp):
     sh = SongHistory()
     sh.set_song(a)
     assert sh.tree.topLevelItemCount() == 3
+
+
+def test_tidy_detail_panel_filters_and_one_song(win, qapp):
+    from pathlib import Path
+    from gekko.core.settings import get_settings
+    from gekko.core.db import get_db
+    get_settings().set("tidy.sort_mode", "all")
+    get_settings().set("library.sort_root", str(Path(get_db().folders()[0]).parent / "Sorted"))
+    win.go("tidy")
+    page = win.pages["tidy"]
+    page.recompute()
+    for _ in range(100):
+        settle(qapp, 0.05)
+        if page.plan and not page._busy:
+            break
+    assert page.plan and page.table.rowCount() == len(page.plan)
+    # filters: moved = no hides them all (every song moves when sorting everything)
+    page.tri["move"].set_value("no")
+    page._fill()
+    assert page.table.rowCount() == 0
+    page._clear_filters()
+    assert page.table.rowCount() == len(page.plan)
+    # click a song: the panel shows it; keep its name and don't move it -> it's marked as changed by you
+    page.table.selectRow(0)
+    settle(qapp, 0.05)
+    sid = page.detail.sid
+    assert sid == page.shown[0]["id"]
+    page.set_ov(sid, name="", folder="")
+    p = next(p for p in page.plan if p["id"] == sid)
+    assert p["edited"] and not p["rename"] and not p["move"]
+    page.tri["edited"].set_value("yes")
+    page._fill()
+    assert [x["id"] for x in page.shown] == [sid]
+    # overrides survive a restart of the page
+    assert str(sid) in get_db().kv_get("tidy_overrides")
+    page.clear_ov(sid)
+    page._clear_filters()
+    # duplicates tab opens
+    page.tabs.set_value("dupes")
+    page._tab("dupes")
+    settle(qapp, 0.1)
+    assert page.stack.currentWidget() is page.dupes

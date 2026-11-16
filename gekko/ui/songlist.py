@@ -220,6 +220,14 @@ class SongDelegate(QStyledItemDelegate):
         self.t = table
 
     def paint(self, p: QPainter, opt, idx):
+        self._paint(p, opt, idx)
+        from .listlook import column_line
+        hh = self.t.horizontalHeader()
+        last = hh.visualIndex(idx.column()) == max(hh.visualIndex(i) for i in range(hh.count())
+                                                    if not hh.isSectionHidden(i))
+        column_line(p, opt.rect, last)
+
+    def _paint(self, p: QPainter, opt, idx):
         m = self.t.model_
         c = m.cols[idx.column()]
         r = m.rows[idx.row()]
@@ -281,7 +289,7 @@ class SongTable(QTableView):
 
     played = Signal(int)
 
-    def __init__(self, cols: list[str] | None = None, parent=None, context: str = ""):
+    def __init__(self, cols: list[str] | None = None, parent=None, context: str = "", state_key: str | None = None):
         super().__init__(parent)
         self.model_ = SongModel(cols)
         self.setModel(self.model_)
@@ -295,7 +303,7 @@ class SongTable(QTableView):
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setShowGrid(False)
-        self.setAlternatingRowColors(False)
+        self.setAlternatingRowColors(True)
         self.setWordWrap(False)
         self.setMouseTracking(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -314,6 +322,12 @@ class SongTable(QTableView):
         self.customContextMenuRequested.connect(self._menu)
         self.doubleClicked.connect(self._double)
         self._apply_cols()
+        if state_key:
+            from .listlook import remember_columns
+            remember_columns(self.horizontalHeader(), state_key, all_interactive=False)
+            for i, c in enumerate(self.model_.cols):
+                if c in ("cover", "fav"):
+                    self.setColumnWidth(i, COLUMNS[c][1])
         pb = get_playback()
         pb.currentChanged.connect(self._playing_changed)
         pb.playingChanged.connect(self._playing_toggled)

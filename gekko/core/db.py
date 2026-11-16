@@ -81,6 +81,9 @@ CREATE TABLE IF NOT EXISTS listens (
     title TEXT, artist TEXT                  -- kept in case the song later leaves the library
 );
 CREATE INDEX IF NOT EXISTS listens_at ON listens(at);
+CREATE TABLE IF NOT EXISTS fingerprints (
+    song_id INTEGER PRIMARY KEY, size INTEGER NOT NULL, mtime REAL NOT NULL, fp BLOB NOT NULL
+);
 CREATE INDEX IF NOT EXISTS listens_song ON listens(song_id, at);
 """
 

@@ -119,8 +119,9 @@ class SongBrowser(QWidget):
         self.summary.setObjectName("faint")
         lay.addWidget(self.summary)
         self.stack = QStackedWidget()
-        self.table = SongTable(cols or list(DEFAULT_COLS), context=self.context())
-        if sort and sort in self.table.model_.cols:
+        self.table = SongTable(cols or list(DEFAULT_COLS), context=self.context(), state_key=f"songs.{key}")
+        from .listlook import has_saved_columns
+        if sort and sort in self.table.model_.cols and not has_saved_columns(f"songs.{key}"):
             self.table.model_.sort_col = sort
             self.table.horizontalHeader().setSortIndicator(self.table.model_.cols.index(sort), Qt.AscendingOrder)
             self.table.horizontalHeader().setSortIndicatorShown(True)

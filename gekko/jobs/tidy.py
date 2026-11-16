@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import time
 import uuid
+from collections import Counter
 from pathlib import Path
 
 from ..core import log as _log
@@ -19,7 +21,7 @@ from ..core.db import get_db, key, main_artist, norm
 from ..core.settings import get_settings
 from ..media import covers, tags
 from .context import JobContext
-from .library_files import safe_name, to_recycle_bin, unique_path
+from .library_files import to_recycle_bin, unique_path
 
 log = _log.get("tidy")
 TEXT = ("title", "artist", "album", "album_artist", "track", "disc", "genre", "year")
@@ -29,25 +31,77 @@ class FileBusy(Exception):
     """The file is open in another program and can't be renamed or changed."""
 
 
+SORT_MODES = [("loose", "Only songs not already in an album folder"), ("all", "Every song"), ("off", "Don't move songs")]
+# "01 Song", "08 - Song", "1-02 Song", "3. Song" - but not "5 Centimeters Per Second" or "10cc"
+_TRACK_PREFIX = re.compile(r"^\s*(?:\d{1,2}[-.])?(?:\d{2,3}(?:\s*[-._)\]]\s*|\s+)|\d\s*[-._)\]]\s*)\S")
+
+
 def options() -> dict:
     s = get_settings()
+    mode = s.get("tidy.sort_mode")
+    if mode not in dict(SORT_MODES):
+        mode = "loose" if s.get("tidy.sort", True) else "off"
     return {"rename": bool(s.get("tidy.rename", True)), "tags": bool(s.get("tidy.tags", True)),
-            "sort": bool(s.get("tidy.sort", True)), "cover": bool(s.get("tidy.cover", True)),
+            "sort": mode, "cover": bool(s.get("tidy.cover", True)),
             "root": s.get("library.sort_root") or "E:\\Music"}
 
 
+def nice_name(s: str, limit: int = 150) -> str:
+    """A file or folder name Windows accepts, changed as little as possible: " becomes ', : becomes " -",
+    slashes and | become -, and ? * < > are dropped."""
+    s = s.replace('"', "'").replace(":", " -").replace("/", "-").replace("\\", "-").replace("|", "-")
+    s = re.sub(r"[?*<>\x00-\x1f]", "", s)
+    s = re.sub(r"\s+", " ", s).strip().rstrip(". ")
+    return s[:limit].rstrip(" .") or "song"
+
+
+def letters(s: str | None) -> str:
+    """Only the letters and digits, for telling whether two names really differ."""
+    return "".join(ch for ch in (s or "").casefold() if ch.isalnum())
+
+
+def real_artist(name: str | None) -> str | None:
+    """An artist name worth using: not empty, and not just a number (a track number that ended up there)."""
+    n = (name or "").strip()
+    if not n or re.fullmatch(r"[\d\s._-]+", n):
+        return None
+    return n
+
+
+def has_track_number(stem: str) -> bool:
+    return bool(_TRACK_PREFIX.match(stem))
+
+
 def stem_for(r) -> str | None:
-    if r["title"] and r["artist"]:
-        return f"{r['artist']} - {r['title']}"
+    artist = real_artist(r["artist"])
+    if r["title"] and artist:
+        return f"{artist} - {r['title']}"
     return r["title"] or None
 
 
 def folder_for(r, root: str) -> Path | None:
-    artist = r["album_artist"] or main_artist(r["artist"])
+    artist = real_artist(r["album_artist"]) or real_artist(main_artist(r["artist"]))
     if not artist:
         return None
     album = r["album"] or "Singles"
-    return Path(root) / safe_name(artist, 80) / safe_name(album, 100)
+    return Path(root) / nice_name(artist, 80) / nice_name(album, 100)
+
+
+def album_folders(rows) -> set[str]:
+    """Folders that already are an album: at least two songs, most of them with the same album name (or a cover
+    picture in the folder)."""
+    by: dict[str, list] = {}
+    for r in rows:
+        by.setdefault(key(str(Path(r["path"]).parent)), []).append(r)
+    out = set()
+    for k, rs in by.items():
+        if len(rs) < 2:
+            continue
+        albums = Counter((r["album"] or "").casefold() for r in rs if r["album"])
+        top = albums.most_common(1)[0][1] if albums else 0
+        if top >= max(2, 0.6 * len(rs)) or any(r["folder_art"] for r in rs):
+            out.add(k)
+    return out
 
 
 def file_tags(r) -> dict:
@@ -57,70 +111,107 @@ def file_tags(r) -> dict:
         return {}
 
 
-def tag_changes(r) -> dict:
-    """Tags whose value in the library differs from the file's."""
+def _norm_tag(k: str, v):
+    if k in ("track", "disc"):
+        try:
+            return int(v) if v not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+    return (str(v).strip() if v is not None else None) or None
+
+
+def tag_changes(r, ov: dict | None = None) -> dict:
+    """Tags whose value in the library differs from the file's (with your edits: other values, or left out)."""
     cur = file_tags(r)
+    ov = ov or {}
+    custom = ov.get("tags") or {}
+    skip = set(ov.get("skip") or ())
     out = {}
     for k in TEXT:
-        want = r[k]
-        have = cur.get(k)
-        if k in ("track", "disc"):
-            want = int(want) if want else None
-            have = int(have) if have else None
-        else:
-            want = (str(want).strip() if want is not None else None) or None
-            have = (str(have).strip() if have is not None else None) or None
-        if want is not None and want != have:
+        if k in skip:
+            continue
+        want = _norm_tag(k, custom[k] if k in custom else r[k])
+        if k == "artist" and k not in custom and not real_artist(want):
+            continue
+        if want is not None and want != _norm_tag(k, cur.get(k)):
             out[k] = want
     return out
 
 
-def plan_for(r, opt: dict, taken: set[str]) -> dict | None:
-    """What Tidy up would do to one song, or None when nothing needs doing."""
+def plan_for(r, opt: dict, taken: set[str], album_dirs: set[str] | None = None, ov: dict | None = None) -> dict | None:
+    """What Tidy up would do to one song, or None when nothing needs doing.
+
+    ov is what you changed for this song: "name" (a file name without extension; "" keeps the current one),
+    "folder" (where to; "" keeps it where it is), "tags" (other values), "skip" (tags to leave alone), "cover"."""
     if not r["title"] or r["missing"]:
         return None
+    ov = ov or {}
     src = Path(r["path"])
+    notes = []
+    # where
     folder = src.parent
-    if opt["sort"]:
-        f = folder_for(r, opt["root"])
-        if f is not None:
-            folder = f
+    if ov.get("folder") is not None:
+        folder = Path(ov["folder"]) if ov["folder"] else src.parent
+    elif opt["sort"] != "off":
+        if opt["sort"] == "loose" and album_dirs is not None and key(str(src.parent)) in album_dirs:
+            notes.append("already in an album folder")
+        else:
+            f = folder_for(r, opt["root"])
+            if f is not None:
+                folder = f
+            else:
+                notes.append("no artist to sort it by")
+    # what it's called
     stem = src.stem
-    if opt["rename"]:
-        stem = safe_name(stem_for(r) or src.stem, 150)
+    if ov.get("name") is not None:
+        stem = nice_name(ov["name"]) if ov["name"] else src.stem
+    elif opt["rename"]:
+        want = stem_for(r)
+        if not want:
+            pass
+        elif has_track_number(src.stem):
+            notes.append("keeps its track number")
+        elif letters(want) == letters(src.stem):
+            pass                                   # the same name apart from punctuation: leave it
+        elif not real_artist(r["artist"]):
+            notes.append("no artist for the name")
+        else:
+            stem = nice_name(want)
     dst = folder / (stem + src.suffix)
     if key(dst) != key(src):
-        # never onto another file, nor onto where another song in this plan is going
+        # never onto another file, nor onto where another song in this plan is going (the same name in another
+        # folder is fine)
         i = 2
         base = dst
         while (dst.exists() and key(dst) != key(src)) or key(dst) in taken:
             dst = base.with_name(f"{base.stem} ({i}){base.suffix}")
             i += 1
-    if key(dst) == key(src) and str(dst) != str(src):
-        pass                                   # only the letter case changes: still a rename
-    changes = tag_changes(r) if opt["tags"] else {}
-    cover = bool(opt["cover"] and r["has_art"] != 1 and covers.picture_bytes(r) is not None)
+    changes = tag_changes(r, ov) if (opt["tags"] or ov.get("tags") or ov.get("tags_on")) else {}
+    can_cover = r["has_art"] != 1 and covers.picture_bytes(r) is not None
+    cover = bool(can_cover and (ov["cover"] if ov.get("cover") is not None else opt["cover"]))
     moves = str(dst) != str(src)
-    if not moves and not changes and not cover:
+    if not moves and not changes and not cover and not ov:
         return None
     taken.add(key(dst))
     return {"id": r["id"], "src": str(src), "dst": str(dst), "tags": changes, "cover": cover,
-            "rename": src.name != dst.name, "move": key(src.parent) != key(dst.parent)}
+            "can_cover": can_cover, "rename": src.name != dst.name, "move": key(src.parent) != key(dst.parent),
+            "notes": notes, "edited": bool(ov)}
 
 
-def plans(ids: list[int] | None = None, opt: dict | None = None) -> list[dict]:
+def plans(ids: list[int] | None = None, opt: dict | None = None, overrides: dict | None = None) -> list[dict]:
     db = get_db()
     opt = opt or options()
-    where = "missing=0 AND title IS NOT NULL"
-    rows = db.q(f"SELECT * FROM songs WHERE {where} ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, disc, track, "
-                "title COLLATE NOCASE")
+    overrides = overrides or {}
+    rows = db.q("SELECT * FROM songs WHERE missing=0 AND title IS NOT NULL ORDER BY artist COLLATE NOCASE, "
+                "album COLLATE NOCASE, disc, track, title COLLATE NOCASE")
+    album_dirs = album_folders(db.q("SELECT path, album, folder_art FROM songs WHERE missing=0"))
     if ids is not None:
         want = set(ids)
         rows = [r for r in rows if r["id"] in want]
     taken: set[str] = set()
     out = []
     for r in rows:
-        p = plan_for(r, opt, taken)
+        p = plan_for(r, opt, taken, album_dirs, overrides.get(r["id"]))
         if p is not None:
             out.append(p)
     return out

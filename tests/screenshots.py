@@ -68,6 +68,8 @@ def main(out: str) -> int:
     if hoshi:
         db.update_song(hoshi["id"], album="Starlight", genre="J-Pop", year="2023", file_synced=0, id_status="found",
                        id_source="Shazam")
+    from gekko.core.settings import get_settings
+    get_settings().set("tidy.sort_mode", "all")
     for r in db.q("SELECT id FROM songs WHERE title IS NULL AND path LIKE '%track01%'"):
         db.update_song(r["id"], id_status="not_found")
     db.save_artist("Aurora Lane", status="done", kind="Group", country="GB", years="2014–",
@@ -137,6 +139,22 @@ def main(out: str) -> int:
                 w.go(key)
                 settle(0.3)
                 shot(key, width)
+            w.go("tidy")
+            tp = w.pages["tidy"]
+            tp.recompute()
+            for _ in range(60):
+                settle(0.1)
+                if tp.plan and not tp._busy:
+                    break
+            if tp.table.rowCount():
+                tp.table.selectRow(0)
+                settle(0.3)
+            shot("tidy-detail", width)
+            tp.tabs.set_value("dupes")
+            tp._tab("dupes")
+            shot("tidy-dupes", width)
+            tp.tabs.set_value("ready")
+            tp._tab("ready")
             w.goto("album", get_library().albums()[0]["key"])
             shot("album", width)
             w.goto("artist", "Aurora Lane")

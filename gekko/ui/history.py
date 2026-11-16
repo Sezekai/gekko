@@ -102,7 +102,7 @@ class HistoryTree(QTreeWidget):
 
     COLS = ["When", "Song", "Artist", "Album", "Heard", "Played from"]
 
-    def __init__(self, show_song: bool = True, parent=None):
+    def __init__(self, show_song: bool = True, parent=None, key: str = "history"):
         super().__init__(parent)
         self.show_song = show_song
         cols = self.COLS if show_song else ["When", "Heard", "Played from"]
@@ -125,13 +125,18 @@ class HistoryTree(QTreeWidget):
             else:
                 hh.setSectionResizeMode(i, QHeaderView.Interactive)
                 self.setColumnWidth(i, widths.get(c, 120))
+        from .listlook import remember_columns, style_list
+        style_list(self)
+        remember_columns(hh, key if show_song else key + ".song")
 
     def resizeEvent(self, e):  # noqa: N802
         super().resizeEvent(e)
-        if self.show_song:          # narrow windows drop Album, then Played from
-            w = self.viewport().width()
-            self.setColumnHidden(3, w < 900)
-            self.setColumnHidden(5, w < 760)
+        if self.show_song and not getattr(self, "_sized", False):
+            self._sized = True              # first time: the Song column takes the spare room
+            from .listlook import has_saved_columns
+            if not has_saved_columns("history"):
+                rest = sum(self.columnWidth(i) for i in range(self.columnCount()) if i != 1)
+                self.setColumnWidth(1, max(200, self.viewport().width() - rest))
 
     def fill(self, entries: list, mode: str | None) -> None:
         """entries newest first; mode None = no group headings."""

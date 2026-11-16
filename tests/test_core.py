@@ -113,16 +113,102 @@ def test_tidy_renames_tags_sorts_and_undoes(library):
     assert db.song(r["id"])["file_synced"] == 0
 
 
+def _loose(db):
+    return db.one("SELECT * FROM songs WHERE path LIKE '%random songs%' AND title IS NOT NULL AND artist IS NOT NULL "
+                  "AND path NOT LIKE '%voice notes%' ORDER BY id")
+
+
 def test_tidy_never_overwrites(library):
     from gekko.core.settings import get_settings
     from gekko.jobs import tidy
     root, db, _ = library
-    get_settings().set("tidy.sort", False)
-    r = db.one("SELECT * FROM songs WHERE title='Night Bus'")
-    taken = Path(r["path"]).with_name("Aurora Lane - Night Bus.mp3")
+    get_settings().set("tidy.sort_mode", "off")
+    r = _loose(db)
+    tidy.edit_info([r["id"]], {"title": "Night Drive"})
+    taken = Path(r["path"]).with_name(f"{r['artist']} - Night Drive.mp3")
     taken.write_bytes(b"someone else's file")
     p = tidy.plans([r["id"]])[0]
-    assert Path(p["dst"]).name == "Aurora Lane - Night Bus (2).mp3"
+    assert Path(p["dst"]).name == f"{r['artist']} - Night Drive (2).mp3"
+    # the same name in another folder is fine
+    p2 = tidy.plan_for(db.song(r["id"]), tidy.options(), set(), set(),
+                       {"folder": str(root / "elsewhere")})
+    assert Path(p2["dst"]) == root / "elsewhere" / f"{r['artist']} - Night Drive.mp3"
+    # two songs planned into the same folder under the same name don't land on each other
+    taken_keys = {tidy.key(str(root / "elsewhere" / f"{r['artist']} - Night Drive.mp3"))}
+    p3 = tidy.plan_for(db.song(r["id"]), tidy.options(), taken_keys, set(), {"folder": str(root / "elsewhere")})
+    assert Path(p3["dst"]).name.endswith("(2).mp3")
+
+
+def test_tidy_leaves_album_folders_track_numbers_and_punctuation(library):
+    from gekko.core.settings import get_settings
+    from gekko.jobs import tidy
+    root, db, _ = library
+    get_settings().set("library.sort_root", str(root / "Sorted"))
+    get_settings().set("tidy.sort_mode", "loose")
+    album_song = db.one("SELECT * FROM songs WHERE title='Night Bus'")
+    plans = {p["id"]: p for p in tidy.plans()}
+    p = plans.get(album_song["id"])
+    if p is not None:                                  # only tags may change: no move, no rename
+        assert not p["move"] and not p["rename"]
+        assert "already in an album folder" in p["notes"] and "keeps its track number" in p["notes"]
+    assert tidy.has_track_number("02 Night Bus") and tidy.has_track_number("1-03 - Song")
+    assert not tidy.has_track_number("5 Centimeters Per Second") and not tidy.has_track_number("10cc - Song")
+    # a name that only differs by punctuation stays
+    r = _loose(db)
+    src = Path(r["path"])
+    odd = src.with_name(f'{r["artist"]} - {r["title"]}!!.mp3')
+    src.rename(odd)
+    db.x("UPDATE songs SET path=? WHERE id=?", (str(odd), r["id"]))
+    get_settings().set("tidy.sort_mode", "off")
+    p = tidy.plan_for(db.song(r["id"]), tidy.options(), set(), set())
+    assert p is None or not p["rename"]
+    assert tidy.nice_name('He said "hi": ok?') == "He said 'hi' - ok"
+    # every song sorted when asked
+    get_settings().set("tidy.sort_mode", "all")
+    p = tidy.plan_for(db.song(album_song["id"]), tidy.options(), set(), set())
+    assert p["move"]
+
+
+def test_tidy_overrides(library):
+    from gekko.core.settings import get_settings
+    from gekko.jobs import tidy
+    root, db, _ = library
+    get_settings().set("tidy.sort_mode", "off")
+    r = _loose(db)
+    tidy.edit_info([r["id"]], {"title": "Night Drive", "genre": "Jazz"})
+    r = db.song(r["id"])
+    p = tidy.plan_for(r, tidy.options(), set(), set(), {"name": "", "skip": ["genre"], "tags": {"year": "1999"}})
+    assert not p["rename"] and "genre" not in p["tags"] and p["tags"]["year"] == "1999" and p["edited"]
+    p = tidy.plan_for(r, tidy.options(), set(), set(), {"name": "My own name"})
+    assert Path(p["dst"]).name == "My own name.mp3"
+
+
+def test_duplicates(library):
+    import numpy as np
+    from gekko.jobs import duplicates as dup
+    from gekko.jobs.context import JobContext
+    root, db, _ = library
+    assert dup.name_key("03 - Night Bus (2).mp3") == dup.name_key("Night Bus - Copy.flac") == "nightbus"
+    assert dup.name_key("1979.mp3") == "1979"
+    rows = [dict(r) for r in db.q("SELECT * FROM songs WHERE missing=0")]
+    a, b = rows[0], rows[1]
+    copy = Path(a["path"]).with_name(Path(a["path"]).stem + " - Copy" + Path(a["path"]).suffix)
+    shutil.copy(a["path"], copy)
+    rows2 = rows + [dict(a, id=9999, path=str(copy))]
+    assert any(set(g) == {a["id"], 9999} for g in dup.by_name(rows2))
+    assert any(set(g) >= {a["id"], 9999} for g in dup.by_tags(rows2)) or not a["title"]
+    # by sound: made-up fingerprints, two the same with a small shift, one different
+    rng = np.random.default_rng(1)
+    base = rng.integers(0, 2**32, 600, dtype=np.uint64).astype(np.uint32)
+    fake = {a["path"]: base, b["path"]: np.roll(base, 3), str(copy): rng.integers(0, 2**32, 600, dtype=np.uint64).astype(np.uint32)}
+    rs = [dict(a, duration=100), dict(b, duration=101), dict(a, id=9999, path=str(copy), duration=100)]
+    res = dup.by_sound(JobContext(), rs, fp_fn=lambda p: fake[p])
+    assert res["groups"] == [[a["id"], b["id"]]] or res["groups"] == [[b["id"], a["id"]]]
+    # fingerprints are kept for next time
+    res2 = dup.by_sound(JobContext(), rs, fp_fn=lambda p: None)
+    assert res2["new"] == 0 and len(res2["groups"]) == 1
+    keep = dup.best_of([dict(a, bitrate=128000, codec="mp3"), dict(b, bitrate=320000, codec="mp3")])
+    assert keep == b["id"]
 
 
 def test_cover_goes_into_files_without_one(library):
@@ -131,7 +217,7 @@ def test_cover_goes_into_files_without_one(library):
     from gekko.jobs.context import JobContext
     from gekko.media import tags
     root, db, _ = library
-    get_settings().set("tidy.sort", False)
+    get_settings().set("tidy.sort_mode", "off")
     get_settings().set("tidy.rename", False)
     r = db.one("SELECT * FROM songs WHERE title='Hanabi'")
     plan = tidy.plans([r["id"]])

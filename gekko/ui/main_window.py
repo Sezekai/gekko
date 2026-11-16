@@ -401,6 +401,7 @@ class MainWindow(QMainWindow):
         self.split.setStretchFactor(1, 0)
         self.split.splitterMoved.connect(lambda *_: self.s.set("ui.side_width", self.split.sizes()[1])
                                          if self.side.isVisible() else None)
+        self.split.installEventFilter(self)
         self.layers.addWidget(self.split)
         self.full = FullPlayer()
         self.full.closed.connect(lambda: self.show_full(False))
@@ -532,11 +533,18 @@ class MainWindow(QMainWindow):
         self._fit_side()
 
     def _fit_side(self) -> None:
+        """The panel keeps the width you gave it (only a window too narrow for it squeezes it, for now)."""
         if self.side.isVisible():
             w = int(self.s.get("ui.side_width", 320))
             total = self.split.width()
-            w = max(260, min(w, max(260, total - 640)))
-            self.split.setSizes([max(200, total - w), w])
+            w = max(260, min(w, max(260, total - 560)))
+            if self.split.sizes()[1:2] != [w]:
+                self.split.setSizes([max(200, total - w - self.split.handleWidth()), w])
+
+    def eventFilter(self, obj, ev):
+        if obj is self.split and ev.type() == QEvent.Resize:
+            QTimer.singleShot(0, self._fit_side)
+        return super().eventFilter(obj, ev)
 
     def show_full(self, on: bool) -> None:
         self.layers.setCurrentIndex(1 if on else 0)

@@ -64,10 +64,22 @@ A music player for the songs on your own drives, built on Nirvash's look.
   The song that's playing is looked up first. Progress is in the title bar; it can be paused.
 - **Edit info** (E) for one song or many at once.
 - **Tidy up** reviews what would change before anything does: rename to "Artist - Title", write the info into the
-  tags (adding the cover to files without one), and sort into `E:\Music\Artist\Album` (`Artist\Singles` for songs
-  with no album). Leave out single songs, then Apply. The audio is never touched, nothing is overwritten, and every
-  change is in Log > File moves with Undo, which puts the file back *and* its old tags (Ctrl+Z undoes the last
-  batch). The song that's playing waits for the next time.
+  tags (adding the cover to files without one), and move into `E:\Music\Artist\Album` (`Artist\Singles` for songs
+  with no album). By default songs already in an album folder stay put, file names that start with a track number
+  keep it, and names that only differ in punctuation are left alone.
+  - Click a song to see everything that would change for it in a side panel, and change any part: another name
+    (or keep the current one), another folder (or don't move it), other tag values, tags left out, the cover or not.
+    Apply just that song from there. New name and Moves to can also be edited in the list (double-click).
+  - Mix-and-match filters (renamed, moved, tags, cover art, changed by you: any / yes / no) choose what's listed
+    and what Apply does; the Do ticks still decide what happens.
+  - The same name is fine in different folders; nothing is ever overwritten. The audio is never touched, and every
+    change is in Log > File moves with Undo, which puts the file back *and* its old tags (Ctrl+Z undoes the last
+    batch). The song that's playing waits for the next time.
+- **Duplicates** (in Tidy up): songs that are the same by file name, by title and artist, or by their sound
+  (fingerprints, kept for next time). Each group marks the copy to keep (lossless or the best bitrate, then rating,
+  plays and cover art); send the rest to the Recycle Bin in one go, or choose them yourself.
+- **Lists** have alternating row shades and column lines; columns can be resized and moved, and every list keeps its
+  widths, order and sort. Tile sizes in each section and the side panel widths are remembered too.
 
 **Around the app:** one window only, a log (L) that opens on errors, Settings > Storage (sizes, move, clear the
 cache), Settings > Reset one part at a time, crash logs and safe mode, the Look screen with themes shared across
