@@ -332,10 +332,10 @@ def test_sorting_songs_and_grids(win, qapp):
     settle(qapp, 0.1)
     # a field that isn't a column, both ways
     b.sorter.combo.setCurrentIndex(b.sorter.combo.findData("file"))
-    names = [r["path"].replace("\\\\", "/").rsplit("/", 1)[-1].casefold() for r in b.table.rows()]
+    names = [__import__("os").path.basename(r["path"]).casefold() for r in b.table.rows()]
     assert names == sorted(names)
     b.sorter.dir.click()
-    names = [r["path"].replace("\\\\", "/").rsplit("/", 1)[-1].casefold() for r in b.table.rows()]
+    names = [__import__("os").path.basename(r["path"]).casefold() for r in b.table.rows()]
     assert names == sorted(names, reverse=True) and b.sorter.dir.text() == "Z to A"
     assert get_settings().get("ui.songsort.songs") == {"by": "file", "desc": True}
     # a column, reversed: the header shows it too; clicking a header shows in the sort box
