@@ -48,6 +48,18 @@ MB_LIMIT = RateLimiter(1, 1.1)         # MusicBrainz: 1 request per second
 ITUNES_LIMIT = RateLimiter(18, 60.0)
 
 
+def mb_get(url: str, params: dict, tries: int = 3):
+    """A MusicBrainz request at its 1-a-second pace. When it's busy (503) it waits and asks again a couple of
+    times, as MusicBrainz asks clients to."""
+    for i in range(tries):
+        MB_LIMIT.wait()
+        r = _http.get(url, params=params, timeout=30)
+        if r.status_code != 503 or i == tries - 1:
+            return r
+        time.sleep(2.0 * (i + 1))
+    return r
+
+
 def wav_bytes(y: np.ndarray, sr: int) -> bytes:
     pcm = (np.clip(y, -1, 1) * 32767).astype("<i2").tobytes()
     buf = io.BytesIO()
@@ -226,10 +238,9 @@ def acoustid(fp: str, duration: int, key: str) -> dict | None:
 
 
 def musicbrainz(mbid: str | None = None, title: str | None = None, artist: str | None = None) -> dict | None:
-    MB_LIMIT.wait()
     base = "https://musicbrainz.org/ws/2/recording"
     if mbid:
-        r = _http.get(f"{base}/{mbid}", params={"inc": "genres+tags+releases+artist-credits", "fmt": "json"}, timeout=30)
+        r = mb_get(f"{base}/{mbid}", {"inc": "genres+tags+releases+artist-credits", "fmt": "json"})
         if r.status_code == 404:
             return None
         r.raise_for_status()
@@ -238,14 +249,13 @@ def musicbrainz(mbid: str | None = None, title: str | None = None, artist: str |
         if not title:
             return None
         q = f'recording:"{title}"' + (f' AND artist:"{artist}"' if artist else "")
-        r = _http.get(base, params={"query": q, "limit": 5, "fmt": "json"}, timeout=30)
+        r = mb_get(base, {"query": q, "limit": 5, "fmt": "json"})
         r.raise_for_status()
         recs = [x for x in r.json().get("recordings") or [] if int(x.get("score", 0)) >= 90]
         if not recs:
             return None
         rec = recs[0]
-        MB_LIMIT.wait()
-        r = _http.get(f"{base}/{rec['id']}", params={"inc": "genres+tags+releases", "fmt": "json"}, timeout=30)
+        r = mb_get(f"{base}/{rec['id']}", {"inc": "genres+tags+releases", "fmt": "json"})
         if r.ok:
             rec = r.json()
     info: dict = {"mbid": rec.get("id")}

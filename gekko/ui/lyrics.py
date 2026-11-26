@@ -73,6 +73,7 @@ class LyricsView(QWidget):
         self.cur = -1
         self._offset = 0.0
         self._w = 0
+        self._layout = []
         self.update()
 
     def has_lyrics(self) -> bool:
@@ -133,7 +134,10 @@ class LyricsView(QWidget):
             self.update()
 
     def _follow(self) -> None:
-        if time.monotonic() < self._manual_until or not self._layout or self.cur < 0:
+        if time.monotonic() < self._manual_until or not self.lines or self.cur < 0:
+            return
+        self._relayout()                      # the lines may have changed since the last paint
+        if self.cur >= len(self._layout):
             return
         y, h, _ = self._layout[self.cur]
         target = y + h / 2 - self.height() * (0.42 if self.big else 0.38)

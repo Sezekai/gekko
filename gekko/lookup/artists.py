@@ -13,7 +13,7 @@ from ..core import log as _log
 from ..core.db import artist_key, get_db
 from ..core.settings import get_settings
 from . import services
-from .services import MB_LIMIT, _http
+from .services import _http
 
 log = _log.get("artists")
 
@@ -27,9 +27,8 @@ def _same(a: str, b: str) -> bool:
 
 
 def musicbrainz_artist(name: str) -> dict | None:
-    MB_LIMIT.wait()
-    r = _http.get("https://musicbrainz.org/ws/2/artist", params={"query": f'artist:"{name}"', "limit": 8,
-                                                                 "fmt": "json"}, timeout=30)
+    r = services.mb_get("https://musicbrainz.org/ws/2/artist", {"query": f'artist:"{name}"', "limit": 8,
+                                                                "fmt": "json"})
     r.raise_for_status()
     best = None
     for a in r.json().get("artists") or []:
@@ -39,9 +38,7 @@ def musicbrainz_artist(name: str) -> dict | None:
             break
     if best is None:
         return None
-    MB_LIMIT.wait()
-    r = _http.get(f"https://musicbrainz.org/ws/2/artist/{best['id']}", params={"inc": "url-rels", "fmt": "json"},
-                  timeout=30)
+    r = services.mb_get(f"https://musicbrainz.org/ws/2/artist/{best['id']}", {"inc": "url-rels", "fmt": "json"})
     full = r.json() if r.ok else best
     ls = full.get("life-span") or {}
     years = ""

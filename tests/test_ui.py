@@ -307,3 +307,19 @@ def test_tidy_detail_panel_filters_and_one_song(win, qapp):
     assert page.stack.currentWidget() is page.dupes
     page.dupes._refresh()
     assert page.dupes.tree.topLevelItemCount() >= 1
+
+
+def test_lyrics_follow_after_switching_songs(qapp):
+    """1.2.1: a song with short synced lyrics, then one with longer ones, before a repaint -> IndexError."""
+    from gekko.ui.lyrics import LyricsView
+    v = LyricsView()
+    v.resize(300, 400)
+    v.show()
+    long = "\n".join(f"[00:{i:02d}.00]line {i}" for i in range(40))
+    v.set_lyrics("[00:01.00]one\n[00:02.00]two", None)
+    v.set_position(1.5)
+    settle(qapp, 0.05)
+    v.set_lyrics(long, None)
+    v.set_position(30)
+    assert v.cur == 30
+    v.close()
