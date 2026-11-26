@@ -48,6 +48,14 @@ jobs:
           python -u tests/mpv_check.py
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
+      - name: Mini player and full screen (real window)
+        shell: pwsh
+        run: |
+          $env:PATH = "$PWD\bin;$env:PATH"
+          $env:QT_QPA_PLATFORM = "windows"
+          python -u tests/window_check.py
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
       - name: Screenshots at 1100, 1440 and 1920 wide (real window)
         continue-on-error: true
         shell: pwsh

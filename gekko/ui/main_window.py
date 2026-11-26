@@ -277,8 +277,12 @@ def apply_glow(b: QPushButton) -> None:
         b.setGraphicsEffect(None)
 
 
+def _native_windows() -> bool:
+    return sys.platform == "win32" and QGuiApplication.platformName() == "windows"
+
+
 def is_topmost(win: QWidget) -> bool:
-    if sys.platform == "win32":
+    if _native_windows():
         try:
             import ctypes
             return bool(ctypes.windll.user32.GetWindowLongW(int(win.winId()), -20) & 0x0008)   # WS_EX_TOPMOST
@@ -289,7 +293,7 @@ def is_topmost(win: QWidget) -> bool:
 
 def set_topmost(win: QWidget, on: bool) -> None:
     """Keep the window above others (the mini player), without re-creating it."""
-    if sys.platform == "win32":
+    if _native_windows():
         try:
             import ctypes
             HWND_TOPMOST, HWND_NOTOPMOST = -1, -2
