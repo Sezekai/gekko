@@ -138,10 +138,25 @@ def test_full_and_mini_players(win, qapp):
     key(win, "Ctrl+M")
     settle(qapp)
     assert win.property("mini") and win.modes.currentIndex() == 1 and win.width() < 500
+    assert win.height() < 120, win.height()            # 1.2.3: the full window's parts held it tall
+    assert win.mini.title.geometry().bottom() < win.mini.play.geometry().top() + 40
+    from gekko.ui.main_window import is_topmost
+    win.mini.pin.setChecked(True)
+    assert win._top_timer.isActive() and is_topmost(win)
+    win.mini.pin.setChecked(False)
+    assert not win._top_timer.isActive() and not is_topmost(win)
+    win.mini.pin.setChecked(True)
     assert pb.is_playing()
     key(win, "Ctrl+M")
     settle(qapp)
-    assert not win.property("mini") and win.width() >= win.min_size[0]
+    assert not win.property("mini") and win.width() >= win.min_size[0] and win.height() >= win.min_size[1]
+    assert not win._top_timer.isActive() and not is_topmost(win)
+    # full screen and back
+    win.toggle_full_screen()
+    settle(qapp, 0.3)
+    win.toggle_full_screen()
+    settle(qapp, 0.3)
+    assert win.updatesEnabled() and win.title_bar.isVisible()
 
 
 def test_artist_album_pages_and_back(win, qapp):

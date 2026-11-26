@@ -8,7 +8,7 @@ from pathlib import Path
 from PySide6.QtCore import QByteArray, QEvent, QObject, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QGuiApplication, QKeySequence, QLinearGradient, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QFrame, QGraphicsDropShadowEffect, QHBoxLayout, QLabel,
-                               QLineEdit, QMainWindow, QPlainTextEdit, QPushButton, QSplitter, QStackedWidget,
+                               QLineEdit, QMainWindow, QPlainTextEdit, QPushButton, QSizePolicy, QSplitter, QStackedWidget,
                                QTextEdit, QToolButton, QVBoxLayout, QWidget)
 
 from .. import APP_NAME, VERSION
@@ -277,6 +277,16 @@ def apply_glow(b: QPushButton) -> None:
         b.setGraphicsEffect(None)
 
 
+def is_topmost(win: QWidget) -> bool:
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            return bool(ctypes.windll.user32.GetWindowLongW(int(win.winId()), -20) & 0x0008)   # WS_EX_TOPMOST
+        except Exception:
+            return False
+    return bool(win.windowFlags() & Qt.WindowStaysOnTopHint)
+
+
 def set_topmost(win: QWidget, on: bool) -> None:
     """Keep the window above others (the mini player), without re-creating it."""
     if sys.platform == "win32":
@@ -331,10 +341,14 @@ class MainWindow(QMainWindow):
         cl.addWidget(self.modes)
         full = QWidget()
         full.setObjectName("transparent")
+        self.full_ui = full
         self.modes.addWidget(full)
         self.mini = MiniPlayer()
         self.mini.restore.connect(self.toggle_mini)
-        self.mini.pinToggled.connect(lambda on: set_topmost(self, on) if self.property("mini") else None)
+        self.mini.pinToggled.connect(self._mini_pin)
+        # Windows drops "on top" when the window changes state (leaving maximised or full screen happens just as
+        # the mini player opens), so it's put back whenever it goes missing.
+        self._top_timer = QTimer(self, interval=700, timeout=self._keep_on_top)
         self.modes.addWidget(self.mini)
 
         outer = QVBoxLayout(full)
@@ -578,8 +592,14 @@ class MainWindow(QMainWindow):
                 self.showNormal()
             self.setProperty("mini", True)
             self.modes.setCurrentIndex(1)
+            # the full window's parts would otherwise keep the window tall (a stack is as big as its biggest page)
+            self.full_ui.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+            self.full_ui.hide()
+            self._fit_frame()
             self.setMinimumSize(300, 88)
+            self.setMaximumHeight(140)
             self.resize(370, 92)
+            QTimer.singleShot(0, lambda: self.resize(max(300, self.width()), 92) if self.property("mini") else None)
             pos = self.s.get("ui.mini_pos") or []
             scr = self.screen().availableGeometry() if self.screen() else None
             if len(pos) == 2 and any(s.availableGeometry().contains(pos[0] + 20, pos[1] + 20)
@@ -587,14 +607,17 @@ class MainWindow(QMainWindow):
                 self.move(pos[0], pos[1])
             elif scr is not None:
                 self.move(scr.right() - 370 - 24, scr.bottom() - 92 - 24)
-            if self.s.get("ui.mini_on_top", True):
-                set_topmost(self, True)
+            self._mini_pin(bool(self.s.get("ui.mini_on_top", True)))
             self.toast.hide()
         else:
             self.s.set("ui.mini_pos", [self.x(), self.y()])
+            self._top_timer.stop()
             set_topmost(self, False)
             self.setProperty("mini", False)
+            self.setMaximumHeight(16777215)
+            self.full_ui.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
             self.modes.setCurrentIndex(0)
+            self.full_ui.show()
             self.setMinimumSize(*self.min_size)
             if getattr(self, "_full_geo", None) is not None:
                 self.restoreGeometry(self._full_geo)
@@ -720,10 +743,35 @@ class MainWindow(QMainWindow):
         if self.property("mini"):
             return
         if self.isFullScreen():
+            # Hold painting while Windows resizes the window, then draw once at the new size; otherwise the
+            # half-resized frames show stretched or unpainted edges.
+            self.setUpdatesEnabled(False)
+            self.title_bar.setVisible(True)
             self.showMaximized() if getattr(self, "_fs_was_max", False) else self.showNormal()
+            QTimer.singleShot(180, self._settled)
         else:
             self._fs_was_max = self.isMaximized()
+            self.setUpdatesEnabled(False)
             self.showFullScreen()
+            QTimer.singleShot(180, self._settled)
+
+    def _mini_pin(self, on: bool) -> None:
+        if not self.property("mini"):
+            return
+        set_topmost(self, on)
+        if on:
+            self._top_timer.start()
+        else:
+            self._top_timer.stop()
+
+    def _keep_on_top(self) -> None:
+        if self.property("mini") and self.s.get("ui.mini_on_top", True) and not is_topmost(self):
+            set_topmost(self, True)
+
+    def _settled(self) -> None:
+        self._fit_frame()
+        self.setUpdatesEnabled(True)
+        self.update()
 
     def toggle_panels(self) -> None:
         self._hidden_panels = not self._hidden_panels

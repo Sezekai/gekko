@@ -318,6 +318,11 @@ def apply(app, t: dict | None = None) -> None:
     app.setFont(f)
     _write_svg_resources()
     app.setStyleSheet(stylesheet())
+    from PySide6.QtGui import QPalette
+    pal = app.palette()                      # what shows for a moment while the window grows or shrinks
+    for role in (QPalette.Window, QPalette.Base):
+        pal.setColor(role, QColor(C["bg"]))
+    app.setPalette(pal)
 
 
 # Kept for older callers ------------------------------------------------------
