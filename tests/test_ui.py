@@ -323,3 +323,34 @@ def test_lyrics_follow_after_switching_songs(qapp):
     v.set_position(30)
     assert v.cur == 30
     v.close()
+
+
+def test_sorting_songs_and_grids(win, qapp):
+    from gekko.core.settings import get_settings
+    win.go("songs")
+    b = win.pages["songs"].b
+    settle(qapp, 0.1)
+    # a field that isn't a column, both ways
+    b.sorter.combo.setCurrentIndex(b.sorter.combo.findData("file"))
+    names = [r["path"].replace("\\\\", "/").rsplit("/", 1)[-1].casefold() for r in b.table.rows()]
+    assert names == sorted(names)
+    b.sorter.dir.click()
+    names = [r["path"].replace("\\\\", "/").rsplit("/", 1)[-1].casefold() for r in b.table.rows()]
+    assert names == sorted(names, reverse=True) and b.sorter.dir.text() == "Z to A"
+    assert get_settings().get("ui.songsort.songs") == {"by": "file", "desc": True}
+    # a column, reversed: the header shows it too; clicking a header shows in the sort box
+    b.sorter.combo.setCurrentIndex(b.sorter.combo.findData("length"))
+    lens = [r["duration"] or 0 for r in b.table.rows()]
+    assert lens == sorted(lens, reverse=True) and b.sorter.dir.text() == "Longest first"
+    from PySide6.QtCore import Qt
+    i = b.table.model_.cols.index("title")
+    b.table.horizontalHeader().setSortIndicator(i, Qt.AscendingOrder)
+    assert b.sorter.key == "title" and not b.sorter.desc
+    # grids turn round too
+    win.go("albums")
+    page = win.pages["albums"]
+    page.fill()
+    first = [it["title"] for it in page.grid.model_.items]
+    page.rev.click()
+    assert [it["title"] for it in page.grid.model_.items] == first[::-1]
+    page.rev.click()

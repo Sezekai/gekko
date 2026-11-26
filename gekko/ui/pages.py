@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+from PySide6.QtWidgets import (QComboBox, QToolButton, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
                                QListWidgetItem, QMenu, QScrollArea, QSizePolicy, QSlider, QSplitter, QStackedWidget,
                                QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
@@ -93,7 +93,7 @@ class SongsPage(Page):
 class GridPage(Page):
     """A grid of things (albums, artists, genres) with sort and size, and a detail view for one of them."""
 
-    SORTS: list[tuple[str, str]] = []
+    SORTS: list[tuple[str, str, tuple[str, str]]] = []   # key, name, (words for its usual way, reversed)
     key = ""
 
     def __init__(self):
@@ -115,12 +115,21 @@ class GridPage(Page):
         bar.addWidget(self.search, 1)
         bar.addWidget(label("Sort", "cap"))
         self.sort = QComboBox()
-        for k, t in self.SORTS:
+        for k, t, _w in self.SORTS:
             self.sort.addItem(t, k)
         i = self.sort.findData(self.s.get(f"ui.sort.{self.key}", self.SORTS[0][0]))
         self.sort.setCurrentIndex(max(0, i))
         self.sort.currentIndexChanged.connect(self._sort_changed)
         bar.addWidget(self.sort)
+        self.rev = QToolButton()
+        self.rev.setObjectName("menuBtn")
+        self.rev.setCheckable(True)
+        self.rev.setChecked(bool(self.s.get(f"ui.sort_rev.{self.key}", False)))
+        self.rev.setCursor(Qt.PointingHandCursor)
+        self.rev.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.rev.clicked.connect(self._rev_changed)
+        bar.addWidget(self.rev)
+        self._rev_look()
         self.extra_bar(bar)
         self.size = QSlider(Qt.Horizontal)
         self.size.setRange(96, 320)
@@ -165,7 +174,23 @@ class GridPage(Page):
 
     def _sort_changed(self) -> None:
         self.s.set(f"ui.sort.{self.key}", self.sort.currentData())
+        self._rev_look()
         self.fill()
+
+    def _rev_changed(self) -> None:
+        self.s.set(f"ui.sort_rev.{self.key}", self.rev.isChecked())
+        self._rev_look()
+        self.fill()
+
+    def _rev_words(self) -> tuple[str, str]:
+        return next((w for k, _t, w in self.SORTS if k == self.sort.currentData()), ("Normal order", "Reversed"))
+
+    def _rev_look(self) -> None:
+        on = self.rev.isChecked()
+        w = self._rev_words()
+        self.rev.setText(w[1] if on else w[0])
+        self.rev.setIcon(icon("sort_desc" if on else "sort_asc", C["sec"], 16))
+        self.rev.setToolTip(f"Click for {w[0] if on else w[1]}")
 
     def _lib_changed(self) -> None:
         self._dirty = True
@@ -189,6 +214,8 @@ class GridPage(Page):
     def fill(self) -> None:
         self._dirty = False
         items = self.items()
+        if self.rev.isChecked():
+            items.reverse()
         t = self.search.text().strip().casefold()
         if t:
             items = [it for it in items if all(w in (it["title"] + " " + it.get("sub", "")).casefold()
@@ -269,8 +296,10 @@ class AlbumsPage(GridPage):
     title = "Albums"
     desc = "Albums from your songs' tags. Click one to see its songs"
     key = "albums"
-    SORTS = [("artist", "Artist"), ("album", "Album name"), ("newest", "Newest released"),
-             ("oldest", "Oldest released"), ("added", "Recently added"), ("plays", "Most played")]
+    SORTS = [("artist", "Artist", ("A to Z", "Z to A")), ("album", "Album name", ("A to Z", "Z to A")),
+             ("newest", "Date released", ("Newest first", "Oldest first")),
+             ("added", "Date added", ("Newest first", "Oldest first")),
+             ("plays", "Plays", ("Most first", "Fewest first"))]
 
     def items(self) -> list[dict]:
         al = list(get_library().albums())
@@ -279,8 +308,6 @@ class AlbumsPage(GridPage):
             al.sort(key=lambda a: a["album"].casefold())
         elif k == "newest":
             al.sort(key=lambda a: -(a["year"] or 0))
-        elif k == "oldest":
-            al.sort(key=lambda a: a["year"] or 9999)
         elif k == "added":
             al.sort(key=lambda a: -a["added"])
         elif k == "plays":
@@ -372,7 +399,8 @@ class ArtistsPage(GridPage):
     title = "Artists"
     desc = "Everyone in your library. Click an artist for their profile and all their songs"
     key = "artists"
-    SORTS = [("name", "Name"), ("songs", "Most songs"), ("plays", "Most played")]
+    SORTS = [("name", "Name", ("A to Z", "Z to A")), ("songs", "Songs", ("Most first", "Fewest first")),
+             ("plays", "Plays", ("Most first", "Fewest first"))]
 
     def extra_bar(self, bar: QHBoxLayout) -> None:
         self.who = Segmented([("main", "Main artists"), ("all", "Everyone")], self.s.get("ui.artists_who", "main"))
@@ -510,7 +538,7 @@ class GenresPage(GridPage):
     title = "Genres"
     desc = "Your songs by genre. Click one to see its songs"
     key = "genres"
-    SORTS = [("songs", "Most songs"), ("name", "Name")]
+    SORTS = [("songs", "Songs", ("Most first", "Fewest first")), ("name", "Name", ("A to Z", "Z to A"))]
 
     def items(self) -> list[dict]:
         gs = list(get_library().genres())

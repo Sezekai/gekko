@@ -386,3 +386,63 @@ class TaskProgress(QWidget):
             if not text.lower().startswith(("stop", "fail")):
                 self.bar.setValue(1000)
                 self.pct.setText("100%")
+
+
+class SortControl(QWidget):
+    """Sort by: a field, and a button that turns it the other way round (named for each field: A to Z, Newest
+    first…). `fields` are (key, name, (low-to-high words, high-to-low words)); key None means "as listed"."""
+
+    changed = Signal(object, bool)   # key, descending
+
+    def __init__(self, fields, value=None, desc: bool = False, parent=None):
+        super().__init__(parent)
+        from PySide6.QtWidgets import QComboBox, QToolButton
+        self.fields = list(fields)
+        self.words = {k: w for k, _n, w in self.fields}
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+        lay.addWidget(label("Sort", "cap"))
+        self.combo = QComboBox()
+        for k, n, _w in self.fields:
+            self.combo.addItem(n, k)
+        self.combo.setCurrentIndex(max(0, self.combo.findData(value)))
+        self.combo.currentIndexChanged.connect(self._emit)
+        lay.addWidget(self.combo)
+        self.dir = QToolButton()
+        self.dir.setObjectName("menuBtn")
+        self.dir.setCheckable(True)
+        self.dir.setChecked(desc)
+        self.dir.setCursor(Qt.PointingHandCursor)
+        self.dir.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.dir.clicked.connect(self._emit)
+        lay.addWidget(self.dir)
+        self._look()
+
+    @property
+    def key(self):
+        return self.combo.currentData()
+
+    @property
+    def desc(self) -> bool:
+        return self.dir.isChecked()
+
+    def set(self, key, desc: bool) -> None:
+        """Show a sort chosen elsewhere (a column header click) without announcing it."""
+        self.combo.blockSignals(True)
+        self.combo.setCurrentIndex(max(0, self.combo.findData(key)))
+        self.combo.blockSignals(False)
+        self.dir.setChecked(desc)
+        self._look()
+
+    def _look(self) -> None:
+        w = self.words.get(self.key)
+        self.dir.setVisible(w is not None)
+        if w:
+            self.dir.setText(w[1] if self.desc else w[0])
+            self.dir.setIcon(icon("sort_desc" if self.desc else "sort_asc", C["sec"], 16))
+            self.dir.setToolTip(f"Click for {w[0] if self.desc else w[1]}")
+
+    def _emit(self, *_a) -> None:
+        self._look()
+        self.changed.emit(self.key, self.desc)

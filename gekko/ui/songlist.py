@@ -4,6 +4,7 @@ marked; songs can be dragged onto playlists and the queue."""
 from __future__ import annotations
 
 import json
+import os
 import time
 
 from PySide6.QtCore import QAbstractTableModel, QMimeData, QModelIndex, QRect, QRectF, QSize, Qt, Signal
@@ -54,7 +55,30 @@ def _sort_key(col: str):
         "plays": lambda r: r["plays"] or 0,
         "last": lambda r: r["last_played"] or 0,
         "added": lambda r: r["added_at"] or 0,
+        "file": lambda r: os.path.basename(r["path"]).casefold(),
+        "folder": lambda r: ((r["folder"] or "").casefold(), os.path.basename(r["path"]).casefold()),
+        "bitrate": lambda r: r.get("bitrate") or 0,
     }[col]
+
+
+# What the Sort menu offers: key, name, (words for low-to-high, high-to-low)
+SORT_FIELDS = [
+    ("title", "Title", ("A to Z", "Z to A")),
+    ("artist", "Artist", ("A to Z", "Z to A")),
+    ("album", "Album", ("A to Z", "Z to A")),
+    ("genre", "Genre", ("A to Z", "Z to A")),
+    ("year", "Date released", ("Oldest first", "Newest first")),
+    ("added", "Date added", ("Oldest first", "Newest first")),
+    ("last", "Last played", ("Longest ago first", "Most recent first")),
+    ("length", "Length", ("Shortest first", "Longest first")),
+    ("rating", "Rating", ("Lowest first", "Highest first")),
+    ("plays", "Plays", ("Fewest first", "Most first")),
+    ("fav", "Favourites", ("Favourites last", "Favourites first")),
+    ("track", "Track number", ("First to last", "Last to first")),
+    ("file", "File name", ("A to Z", "Z to A")),
+    ("folder", "Folder", ("A to Z", "Z to A")),
+    ("bitrate", "Quality (bitrate)", ("Lowest first", "Highest first")),
+]
 
 
 def _ago(t: float | None) -> str:
@@ -168,6 +192,14 @@ class SongModel(QAbstractTableModel):
 
     def _sort(self) -> None:
         self.rows.sort(key=_sort_key(self.sort_col), reverse=self.sort_desc)
+
+    def sort_by(self, key: str | None, desc: bool = False) -> None:
+        """Sort by any field, shown as a column or not. None: as given."""
+        self.layoutAboutToBeChanged.emit()
+        self.sort_col, self.sort_desc = key, desc
+        if key:
+            self._sort()
+        self.layoutChanged.emit()
 
     def clear_sort(self) -> None:
         self.sort_col = None

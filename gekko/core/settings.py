@@ -107,7 +107,9 @@ class Settings:
             parts = dotted.split(".")
             cur = self.data
             for part in parts[:-1]:
-                cur = cur.setdefault(part, {})
+                if not isinstance(cur.get(part), dict):     # a value where a group is wanted: the group wins
+                    cur[part] = {}
+                cur = cur[part]
             cur[parts[-1]] = value
         if save:
             self.save()

@@ -328,3 +328,14 @@ def test_every_colour_name_used_exists():
             if m.group(1) not in C:
                 bad.append(f"{f.name}: {m.group(1)}")
     assert not bad, bad
+
+
+def test_settings_value_and_group_with_the_same_name(fresh):
+    """1.2.2: 'ui.cols.tidy' saved as text, then 'ui.cols.tidy.unknown' -> TypeError at start."""
+    from gekko.core.settings import get_settings
+    from gekko.ui.listlook import _flat
+    s = get_settings()
+    s.set("ui.cols.tidy", "abc")
+    s.set("ui.cols.tidy.unknown", "def")
+    assert s.get("ui.cols.tidy.unknown") == "def"
+    assert _flat("tidy.unknown") == "tidy_unknown"

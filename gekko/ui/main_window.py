@@ -237,7 +237,6 @@ class Rail(QWidget):
     def restyle(self) -> None:
         for k, b in self.btns.items():
             b.setIcon(icon(self.icons[k], C["sec"], 19, checked_color=C["acc"]))
-        pm = theme.pixmap("note", 18, C["on_acc"])
         dpr = 2.0
         tile = QPixmap(int(36 * dpr), int(36 * dpr))
         tile.setDevicePixelRatio(dpr)
@@ -251,7 +250,7 @@ class Rail(QWidget):
         p.setBrush(g)
         p.setPen(Qt.NoPen)
         p.drawRoundedRect(QRectF(0, 0, 36, 36), 9, 9)
-        p.drawPixmap(9, 9, pm)
+        theme.paint_logo(p, QRectF(0, 0, 36, 36), C["on_acc"])
         p.end()
         self.logo.setPixmap(tile)
 

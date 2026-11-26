@@ -484,6 +484,8 @@ _P = {
     "copy": '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     "warn": '<path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3z"/><path d="M12 9v4M12 17h.01"/>',
     "chev": '<path d="m6 9 6 6 6-6"/>',
+    "sort_asc": '<path d="M7 19V5M3.5 8.5 7 5l3.5 3.5"/><path d="M13 7h3M13 12h5M13 17h7"/>',
+    "sort_desc": '<path d="M7 5v14M3.5 15.5 7 19l3.5-3.5"/><path d="M13 7h7M13 12h5M13 17h3"/>',
     "tri_up": '<path d="M12 6 20 18H4z" fill="currentColor"/>',
     "tri_down": '<path d="M12 18 4 6h16z" fill="currentColor"/>',
     "skip": '<path d="M5 4v16l10-8z" fill="currentColor"/><path d="M19 5v14"/>',
@@ -536,3 +538,40 @@ def qcolor(name: str, alpha: int = 255) -> QColor:
 
 ICON_SIZE = QSize(16, 16)
 set_theme(ap.DEFAULT_THEME)
+
+
+def logo_path():
+    """Gekko's note: solid heads, a stem each and a slanted beam, in 24 units."""
+    from PySide6.QtGui import QPainterPath, QPolygonF, QTransform
+    p = QPainterPath()
+    p.setFillRule(Qt.WindingFill)
+    heads = ((6.6, 17.6), (17.8, 15.6))
+    for cx, cy in heads:
+        e = QPainterPath()
+        e.addEllipse(QPointF(0, 0), 3.5, 2.6)
+        p.addPath(QTransform().translate(cx, cy).rotate(-14).map(e))
+    w = 2.2
+    (lx, ly), (rx, ry) = heads
+    p.addRect(QRectF(lx + 3.2 - w, 6.0, w, ly - 0.8 - 6.0))        # stems end inside their heads
+    p.addRect(QRectF(rx + 3.2 - w, 3.6, w, ry - 0.8 - 3.6))
+    x0, x1 = lx + 3.2 - w, rx + 3.2
+    p.addPolygon(QPolygonF([QPointF(x0, 5.4), QPointF(x1, 3.0), QPointF(x1, 6.2), QPointF(x0, 8.6)]))
+    return p
+
+
+def paint_logo(painter: QPainter, rect: QRectF, color: QColor | str, fill: float = 0.56) -> None:
+    """The note centred in rect (by its outline), its height `fill` of the rect's."""
+    from PySide6.QtGui import QTransform
+    path = logo_path()
+    b = path.boundingRect()
+    s = rect.height() * fill / b.height()
+    t = QTransform()
+    t.translate(rect.center().x(), rect.center().y())
+    t.scale(s, s)
+    t.translate(-b.center().x(), -b.center().y())
+    painter.save()
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QColor(color))
+    painter.drawPath(t.map(path))
+    painter.restore()

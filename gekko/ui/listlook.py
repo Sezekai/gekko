@@ -18,7 +18,7 @@ def column_line(p: QPainter, rect, last: bool) -> None:
     c.setAlphaF(0.55)
     p.save()
     p.setPen(c)
-    p.drawLine(rect.right(), rect.top() + 4, rect.right(), rect.bottom() - 4)
+    p.drawLine(rect.right(), rect.top(), rect.right(), rect.bottom())   # full height, so the lines join up
     p.restore()
 
 
@@ -51,6 +51,7 @@ def remember_columns(header: QHeaderView, key: str, all_interactive: bool = True
     all_interactive: every column takes a width you drag (the last one fills the rest); otherwise a column set to
     stretch keeps filling the spare room and the others are dragged."""
     s = get_settings()
+    key = _flat(key)
     header.setSectionsMovable(True)
     if all_interactive:
         header.setStretchLastSection(True)
@@ -74,5 +75,10 @@ def remember_columns(header: QHeaderView, key: str, all_interactive: bool = True
     header.sortIndicatorChanged.connect(lambda *_: timer.start())
 
 
+def _flat(key: str) -> str:
+    """'tidy' and 'tidy.unknown' must not nest inside each other in the settings file."""
+    return key.replace(".", "_")
+
+
 def has_saved_columns(key: str) -> bool:
-    return bool(get_settings().get(f"ui.cols.{key}"))
+    return bool(get_settings().get(f"ui.cols.{_flat(key)}"))

@@ -13,9 +13,9 @@ from . import actions, filters
 from .grid import CoverGrid
 from .library import fmt_len, get_library
 from .playback import ORDERS, get_playback
-from .songlist import DEFAULT_COLS, SongTable
+from .songlist import DEFAULT_COLS, SORT_FIELDS, SongTable
 from .theme import C, icon
-from .widgets import ElidedLabel, Segmented, button, label
+from .widgets import ElidedLabel, Segmented, SortControl, button, label
 
 
 class PlayButtons(QWidget):
@@ -107,6 +107,11 @@ class SongBrowser(QWidget):
         self.size.setFixedWidth(90)
         self.size.setToolTip("Tile size (Ctrl + mouse wheel)")
         bar.addWidget(self.size)
+        saved = self.s.get(f"ui.songsort.{key}")
+        self.sorter = SortControl([(None, "As listed", None)] + SORT_FIELDS,
+                                  saved["by"] if saved else sort, bool(saved and saved.get("desc")))
+        self.sorter.setToolTip("Sort the songs (column headers sort too)")
+        self.sorter.changed.connect(self._sort_chosen)
         bar.addStretch(1)
         self.play = PlayButtons(lambda: self.shown, self.context)
         bar.addWidget(self.play)
@@ -117,14 +122,15 @@ class SongBrowser(QWidget):
         lay.addWidget(self.pills)
         self.summary = ElidedLabel("")
         self.summary.setObjectName("faint")
-        lay.addWidget(self.summary)
+        srow = QHBoxLayout()
+        srow.setSpacing(8)
+        srow.addWidget(self.summary, 1)
+        srow.addWidget(self.sorter)
+        lay.addLayout(srow)
         self.stack = QStackedWidget()
         self.table = SongTable(cols or list(DEFAULT_COLS), context=self.context(), state_key=f"songs.{key}")
-        from .listlook import has_saved_columns
-        if sort and sort in self.table.model_.cols and not has_saved_columns(f"songs.{key}"):
-            self.table.model_.sort_col = sort
-            self.table.horizontalHeader().setSortIndicator(self.table.model_.cols.index(sort), Qt.AscendingOrder)
-            self.table.horizontalHeader().setSortIndicatorShown(True)
+        self._apply_sort(self.sorter.key, self.sorter.desc)
+        self.table.horizontalHeader().sortIndicatorChanged.connect(self._header_sorted)
         self.stack.addWidget(self.table)
         self.grid = CoverGrid(int(self.s.get(f"ui.tile.{key}", 150)))
         self.grid.opened.connect(lambda it: self.table.play_from(it["id"]))
@@ -166,6 +172,9 @@ class SongBrowser(QWidget):
         self.shown = rows
         self.table.context = self.context()
         self.table.set_rows(rows)
+        if self.table.model_.sort_col is None and self.sorter.key is not None:
+            self.sorter.set(None, False)          # back to the list's own order (a playlist's, say)
+            self.s.set(f"ui.songsort.{self.key}", {"by": None, "desc": False})
         if self.stack.currentIndex() == 1:
             self._fill_grid()
         n = len(filters.describe(f))
@@ -179,6 +188,34 @@ class SongBrowser(QWidget):
         self.summary.setText(txt)
         self.countChanged.emit(txt)
         self.play.setEnabled(bool(rows))
+
+    # ---- sorting ------------------------------------------------------------------------------------
+    def _sort_chosen(self, k, desc: bool) -> None:
+        self.s.set(f"ui.songsort.{self.key}", {"by": k, "desc": desc})
+        self._apply_sort(k, desc)
+        if self.stack.currentIndex() == 1:
+            self._fill_grid()
+
+    def _apply_sort(self, k, desc: bool) -> None:
+        t = self.table
+        h = t.horizontalHeader()
+        h.blockSignals(True)
+        if k in t.model_.cols:
+            h.setSortIndicator(t.model_.cols.index(k), Qt.DescendingOrder if desc else Qt.AscendingOrder)
+            h.setSortIndicatorShown(True)
+        else:
+            h.setSortIndicatorShown(False)
+        h.blockSignals(False)
+        t.model_.sort_by(k, desc)
+
+    def _header_sorted(self, i: int, order) -> None:
+        cols = self.table.model_.cols
+        if 0 <= i < len(cols):
+            desc = order == Qt.DescendingOrder
+            self.sorter.set(cols[i], desc)
+            self.s.set(f"ui.songsort.{self.key}", {"by": cols[i], "desc": desc})
+            if self.stack.currentIndex() == 1:
+                self._fill_grid()
 
     def set_empty_text(self, t: str) -> None:
         self.empty.setText(t)
