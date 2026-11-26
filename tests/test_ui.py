@@ -369,3 +369,17 @@ def test_sorting_songs_and_grids(win, qapp):
     page.rev.click()
     assert [it["title"] for it in page.grid.model_.items] == first[::-1]
     page.rev.click()
+
+
+def test_clicking_the_playing_title_opens_its_album(win, qapp):
+    """1.2.4: the player bar passes a database row (no 'folder'), which crashed album_key."""
+    from gekko.core.db import get_db
+    from gekko.ui import actions
+    from gekko.ui.hub import hub
+    r = get_db().one("SELECT * FROM songs WHERE album IS NOT NULL AND album_artist IS NULL LIMIT 1") or \
+        get_db().one("SELECT * FROM songs WHERE album IS NOT NULL LIMIT 1")
+    seen = []
+    hub.goto.connect(lambda *a: seen.append(a))
+    actions.go_album(r)
+    settle(qapp, 0.05)
+    assert seen and seen[-1][0] == "album"

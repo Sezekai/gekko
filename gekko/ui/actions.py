@@ -60,6 +60,8 @@ def go_artist(r) -> None:
 
 
 def go_album(r) -> None:
+    if r is not None:
+        r = get_library().get(r["id"]) or r
     if r and r["album"]:
         a = get_library().album_of(r)
         if a is not None:

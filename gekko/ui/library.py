@@ -153,7 +153,7 @@ class Library(QObject):
             return None
         if r["album_artist"]:
             return (r["album"].casefold(), r["album_artist"].casefold())
-        return (r["album"].casefold(), os.path.normcase(r["folder"]))
+        return (r["album"].casefold(), os.path.normcase(os.path.dirname(r["path"])))   # any row, not only ours
 
     def albums(self) -> list[dict]:
         if self._albums is None:

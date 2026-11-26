@@ -281,11 +281,24 @@ def _native_windows() -> bool:
     return sys.platform == "win32" and QGuiApplication.platformName() == "windows"
 
 
+def _user32():
+    """user32 with proper 64-bit handle types. (Without them ctypes passes HWND_TOPMOST, -1, as a 32-bit number,
+    which Windows reads as an ordinary window handle, so "on top" silently did nothing.)"""
+    import ctypes
+    from ctypes import wintypes
+    u = ctypes.WinDLL("user32", use_last_error=True)
+    u.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                               wintypes.UINT]
+    u.SetWindowPos.restype = wintypes.BOOL
+    u.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+    u.GetWindowLongW.restype = wintypes.LONG
+    return u
+
+
 def is_topmost(win: QWidget) -> bool:
     if _native_windows():
         try:
-            import ctypes
-            return bool(ctypes.windll.user32.GetWindowLongW(int(win.winId()), -20) & 0x0008)   # WS_EX_TOPMOST
+            return bool(_user32().GetWindowLongW(int(win.winId()), -20) & 0x0008)   # WS_EX_TOPMOST
         except Exception:
             return False
     return bool(win.windowFlags() & Qt.WindowStaysOnTopHint)
@@ -295,13 +308,16 @@ def set_topmost(win: QWidget, on: bool) -> None:
     """Keep the window above others (the mini player), without re-creating it."""
     if _native_windows():
         try:
-            import ctypes
             HWND_TOPMOST, HWND_NOTOPMOST = -1, -2
-            ctypes.windll.user32.SetWindowPos(int(win.winId()), HWND_TOPMOST if on else HWND_NOTOPMOST, 0, 0, 0, 0,
-                                              0x0002 | 0x0001 | 0x0010)
+            ok = _user32().SetWindowPos(int(win.winId()), HWND_TOPMOST if on else HWND_NOTOPMOST, 0, 0, 0, 0,
+                                        0x0002 | 0x0001 | 0x0010)    # keep size, place; don't activate
+            if not ok:
+                import ctypes
+                log.warning("couldn't change 'on top' (Windows error %s)", ctypes.get_last_error())
             return
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("couldn't change 'on top': %s", e)
+            return
     win.setWindowFlag(Qt.WindowStaysOnTopHint, on)
     win.show()
 
