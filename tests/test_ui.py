@@ -289,8 +289,21 @@ def test_tidy_detail_panel_filters_and_one_song(win, qapp):
     assert str(sid) in get_db().kv_get("tidy_overrides")
     page.clear_ov(sid)
     page._clear_filters()
-    # duplicates tab opens
+    # a filter that's set shows it's set
+    page.tri["cover"].set_value("yes")
+    page._clear_filters()
+    # duplicates tab opens and lists a copy
+    import shutil
+    from gekko.jobs import scan
+    from gekko.jobs.context import JobContext
+    src = Path(page.plan[0]["src"])
+    shutil.copy(src, src.with_name(src.stem + " - Copy" + src.suffix))
+    scan.scan(JobContext())
+    from gekko.ui.library import get_library
+    get_library().reload()
     page.tabs.set_value("dupes")
     page._tab("dupes")
     settle(qapp, 0.1)
     assert page.stack.currentWidget() is page.dupes
+    page.dupes._refresh()
+    assert page.dupes.tree.topLevelItemCount() >= 1

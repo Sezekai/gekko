@@ -69,7 +69,7 @@ class _Tri(QComboBox):
     def _restyle(self) -> None:
         on = self.value != "any"
         self.setProperty("active", on)
-        self.setStyleSheet(f"QComboBox {{ border: 1px solid {C['accent']}; color: {C['accent']}; }}" if on else "")
+        self.setStyleSheet(f"QComboBox {{ border: 1px solid {C['acc']}; color: {C['acc']}; }}" if on else "")
 
 
 class _EditDelegate(LinedDelegate):

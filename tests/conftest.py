@@ -57,3 +57,13 @@ def pytest_unconfigure(config):
         except Exception:
             pass
     os._exit(_status["code"])
+
+
+@pytest.fixture(autouse=True)
+def no_errors_in_slots(monkeypatch):
+    """An error inside a Qt slot only gets printed; make it fail the test instead."""
+    import sys
+    seen = []
+    monkeypatch.setattr(sys, "excepthook", lambda t, v, tb: seen.append(f"{t.__name__}: {v}"))
+    yield
+    assert not seen, seen

@@ -78,7 +78,7 @@ class DuplicatesView(QWidget):
         self._refresh()
 
     def _refresh(self, *_a) -> None:
-        if not self.isVisible() and self.groups:
+        if not self.isVisible():                # worked out when the tab is opened
             return
         rows = [r for r in get_library().rows if not r["missing"]]
         m = self.mode.value
@@ -154,7 +154,7 @@ class DuplicatesView(QWidget):
                 it.setToolTip(0, r["path"])
                 it.setToolTip(1, str(Path(r["path"]).parent))
                 if r["id"] == keep:
-                    it.setForeground(0, QColor(C["accent"]))
+                    it.setForeground(0, QColor(C["acc"]))
                 head.addChild(it)
             head.setExpanded(True)
         shown = self.tree.topLevelItemCount()

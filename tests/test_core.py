@@ -315,3 +315,16 @@ def test_odd_mp3_still_gets_its_tags_and_length(fresh, monkeypatch):
     t = tags.read(p)
     assert (t["title"], t["artist"], t["album"]) == ("Liberi Fatali", "Nobuo Uematsu", "Distant Worlds")
     assert 3.5 < t["duration"] < 5
+
+
+def test_every_colour_name_used_exists():
+    """C["name"] with a name the theme doesn't have crashes a screen when it's drawn (1.2.0's 'accent')."""
+    import re
+    from gekko.ui.theme import C
+    root = Path(__file__).resolve().parents[1] / "gekko"
+    bad = []
+    for f in root.rglob("*.py"):
+        for m in re.finditer(r"""\bC\[["']([a-z_0-9]+)["']\]""", f.read_text("utf-8")):
+            if m.group(1) not in C:
+                bad.append(f"{f.name}: {m.group(1)}")
+    assert not bad, bad
